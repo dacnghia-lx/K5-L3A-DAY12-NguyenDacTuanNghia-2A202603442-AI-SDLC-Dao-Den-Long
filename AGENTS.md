@@ -20,7 +20,7 @@ Node ≥18, plain ES modules, no bundler. Three.js only in the browser.
 - Tickets: `docs/lab/tickets/ticket-0N.md`. Spec/acceptance criteria/assumptions per phase: `docs/notes/phase-N.md`.
 
 ## Rules
-- Contract output format is exact: read `docs/notes/contract-v1.md` (v1.0 + v1.1 changes) before touching `src/headless.js` or `src/sim/`.
+- Contract output format is exact: read `docs/notes/contract-v1.md` (v1.0 + v1.1 + v1.2 changes) before touching `src/headless.js` or `src/sim/`.
 - Tick order is mandated by Ticket-02 (pause → timers → move/fall → pickup → interact → safe zones → pulse →
   enemies move → contacts → spawns → win/lose). Keep `Sim.step` in that order; comments mark each step.
 - Randomness only via the seeded RNG in `src/sim/rng.js`. Same seed+scenario+inputs ⇒ byte-identical JSONL.
@@ -29,3 +29,5 @@ Node ≥18, plain ES modules, no bundler. Three.js only in the browser.
 - A test that a new ticket invalidates: change or delete it with a reason in `docs/notes/phase-N.md`, never `skip` silently.
 - New feature ⇒ at least one headless scenario in `tests/scenarios.js` with hand-computed numbers, written before the code.
 - Keep commits small, one concern each. Run `npm test` before every commit (the Stop hook also runs it).
+- Lantern fuel is an INTEGER in 1/60 units (`FUEL_UNIT`); never store fuel as a float. Safe zone = `hasSafeZone(l)` (lit and fuel ≥ 30) — use it everywhere instead of `l.lit`.
+- Design decisions that change core rules get an ADR in `docs/adr/` (see 0001) and a CHANGELOG "Breaking changes" entry.

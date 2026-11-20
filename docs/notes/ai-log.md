@@ -57,3 +57,14 @@ Không phát hiện AI bịa yêu cầu; các chỗ mơ hồ được ghi thành
 | 11 | `window.__shot` chỉ chụp canvas, không có HUD/menu — ảnh pause/kết quả vô dụng | Xem lại ảnh | Chụp bằng ảnh trình duyệt; ghi vào skill `verify-headless` |
 
 **Harness chỉnh sau phase này:** AGENTS.md thêm thứ tự tick bắt buộc, bố cục `levels.js`, quy tắc "tính năng mới phải có scenario trước"; skill `verify-headless` thêm Đêm 2/3, cảnh báo `__shot` và nhắc "khi test đỏ, quyết định code sai hay kỳ vọng sai và ghi lý do".
+
+## Phase 3
+
+**Cách làm:** liệt kê trước các luật [THAY THẾ] và test sẽ sai → viết ADR → sửa sim → 13 scenario mới (số tính tay) → **62/62 đạt ngay lần chạy đầu**. Chỉ 2 test đỏ là đúng dự kiến (contract chưa lên v1.2, bot chưa biết luật bình minh).
+
+| # | Sai gì | Phát hiện bằng | Sửa / bài học |
+|---|---|---|---|
+| 12 | Đèn đặt sẵn `lit` trong scenario hiện `deposited: 5` (vì gán `ever_lit` trước khi tính chi phí) | Chạy thử headless và đọc snapshot | Đổi thứ tự 2 dòng; scenario `scenario-build-silent` giữ kỳ vọng 10 |
+| 13 | Thanh dầu quá nhỏ, nền tối lẫn vào trời đêm; ở chế độ mù màu thanh trắng trên nền sáng | Ảnh chụp trình duyệt | Phóng to, đổi nền xám trung tính |
+| 14 | Dựng cảnh ảnh bằng chứng bằng tay với điểm sai (350 thay vì 450) → bảng điểm trong ảnh không cộng khớp | Tự cộng lại các dòng trong ảnh | Dựng lại cảnh; bài học: ảnh bằng chứng cũng phải tự kiểm số |
+| 15 | Script vá test viết bằng `node -e` trong bash lại hỏng escape lần nữa | — | Viết script vá thành file `.mjs` rồi chạy |

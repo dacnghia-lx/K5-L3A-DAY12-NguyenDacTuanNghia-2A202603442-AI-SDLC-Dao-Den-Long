@@ -10,7 +10,7 @@ import { SCENARIOS } from '../tests/scenarios.js';
 import { ROOT, runCli, runScenario } from '../tests/harness.js';
 import { playBot } from './bot.js';
 
-const phase = process.argv[2] || 'phase-2';
+const phase = process.argv[2] || 'phase-3';
 const dir = join(ROOT, 'docs', 'proof', phase);
 rmSync(join(dir, 'scenarios'), { recursive: true, force: true });
 rmSync(join(dir, 'playthrough'), { recursive: true, force: true });

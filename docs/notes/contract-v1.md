@@ -25,3 +25,13 @@ Nguồn gốc: tab Phase 1 trên lab board. Đây là bản tóm tắt để age
 | Event mới | `dash {}`, `charm_picked {charm_id, charm_ticks}`, `drifter_steal {drifter_id, amount, carried}`, `drifter_drop {drifter_id, amount}`, `night_start {night}` (tick 0, ngay sau snapshot 0), `paused {}`, `resumed {}`; `player_hit` do rơi có thêm `lost` | `Sim` |
 | Tạm dừng | `tick` vẫn tăng; `sim_tick`, thời gian, hồi chiêu, spawn, TTL đứng yên; snapshot `state: "paused"` | `Sim.step` bước 1 |
 | Hiệu năng | 1 Đêm đầy đủ (≤ 21.600 tick) ≤ 30 s | `tests/cli.test.js` |
+
+## v1.2 (Ticket-03) — thay đổi so với v1.1
+
+| Mục | Quy định | Ở đâu trong code |
+|---|---|---|
+| Tuning | `contract_version: "1.2"`; thêm `fuel_max 100, fuel_decay_per_s 1, fuel_per_mote 10, relight_cost 5, win_ratio 0.6, drain_per_s 5, low_fuel_threshold 30, capacity_max 20`; thời lượng 240/270/300 | `tuning.js` |
+| Snapshot | đèn thêm `fuel` (1 chữ số; đèn tắt = 0), `ever_lit`, `relit_count`; player thêm `capacity`; trạng thái Bóng Mực thêm `drain` | `lanternView()`, `playerView()` |
+| Scenario | đèn: `lit`, `fuel`, `ever_lit` (`lit: true` không có `fuel` → 100); player `successful_lights`; shades `target_lantern_id` | `io.js`, constructor `Sim` |
+| Event | `refuel {lantern_id, amount, fuel}`, `lantern_out {lantern_id}`, `fuel_drain {lantern_id, shade_id, fuel}` (mỗi 60 tick hút), `lantern_lit.relight`; `game_over.reason` có `dawn_survived`, bỏ `all_lit` | `interact()`, `burnFuel()`, bước 11 |
+| Thứ tự tick | bước 2 trừ dầu (hao + hút), ngay sau đó đèn ≤ 0 tắt; xét thắng/thua sau mọi cập nhật (kể cả tick bình minh), `no_flames` trước | `Sim.step` |
