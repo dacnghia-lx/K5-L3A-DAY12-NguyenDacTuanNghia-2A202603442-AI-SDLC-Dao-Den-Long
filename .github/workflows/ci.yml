@@ -1,0 +1,24 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install
+      - run: npm test
+      - name: Headless smoke run (contract command from game.contract.json)
+        run: |
+          CMD=$(node -e "console.log(require('./game.contract.json').headless_cmd)")
+          $CMD --seed 1 --night 1 --ticks 600 --out /tmp/out.jsonl
+          tail -n 1 /tmp/out.jsonl
