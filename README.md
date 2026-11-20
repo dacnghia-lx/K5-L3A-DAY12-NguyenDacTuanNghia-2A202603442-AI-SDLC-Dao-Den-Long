@@ -1,6 +1,6 @@
 # Đảo Đèn Lồng
 
-> **Video demo:** _(đính kèm GitHub Release `v1.0.0` — xem mục Phát hành)_ · **Bản chạy được:** Release `v1.0.0` (`dao-den-long-v1.0.0.zip`) · **Bằng chứng:** [Phase 1](docs/proof/phase-1/README.md) · [Phase 2](docs/proof/phase-2/README.md) · [Phase 3](docs/proof/phase-3/README.md) · [Phase 4](docs/proof/phase-4/README.md) · [Retro](docs/notes/retro.md) · Đề lab: [docs/lab](docs/lab/README.md)
+> **Video demo (2:52):** [docs/demo/demo.mp4](docs/demo/demo.mp4) · **Bản chạy được:** Release `v1.0.0` (`dao-den-long-v1.0.0.zip`) · **Bằng chứng:** [Phase 1](docs/proof/phase-1/README.md) · [Phase 2](docs/proof/phase-2/README.md) · [Phase 3](docs/proof/phase-3/README.md) · [Phase 4](docs/proof/phase-4/README.md) · [Retro](docs/notes/retro.md) · Đề lab: [docs/lab](docs/lab/README.md)
 
 Game 3D góc nhìn thứ ba (Day 12 · AI SDLC Lab). Bạn là **Mây**, người giữ đèn nhỏ tuổi đội nón lá treo đèn lồng. Qua **ba Đêm trên ba hòn đảo**, gom đom đóm, nạp ánh sáng để thắp lại các **Đèn Lồng Lớn** trước bình minh, tỏa sáng để xua **Bóng Mực** và giữ đom đóm khỏi **Gió Lạc**.
 
@@ -112,7 +112,7 @@ Tất cả chỉ nằm ở `src/web/` (phần hiển thị), không có trong he
 
 ## Phát hành
 
-`node scripts/package.js` tạo `dist/dao-den-long-v1.0.0/` và `.zip` (chỉ cần Node). Release `v1.0.0` trên GitHub đính kèm file zip này và video demo.
+`node scripts/package.js` tạo `dist/dao-den-long-v1.0.0/` và `.zip` (chỉ cần Node). Release `v1.0.0` trên GitHub đính kèm file zip này; video demo ở [docs/demo/demo.mp4](docs/demo/demo.mp4).
 
 ## Cấu trúc
 
