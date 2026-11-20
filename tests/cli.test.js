@@ -52,7 +52,8 @@ test('output format: snapshot first, end line last, every line valid JSON, coord
   const snaps = lines.filter((l) => l.type === 'snapshot');
   assert.equal(snaps.length, 61);
   for (const s of snaps) {
-    for (const k of ['tick', 'sim_tick', 'state', 'time_left_s', 'score', 'player', 'lanterns', 'shades', 'motes_active']) assert.ok(k in s, k);
+    for (const k of ['tick', 'sim_tick', 'state', 'night', 'time_left_s', 'score', 'wind', 'player', 'lanterns', 'shades', 'motes_active', 'motes', 'drifters', 'charms']) assert.ok(k in s, k);
+    for (const st of s.shades.map((x) => x.state)) assert.ok(['spawning', 'wander', 'chase', 'recoil', 'stunned'].includes(st), st);
     const nums = [...s.player.pos, ...s.shades.flatMap((x) => x.pos), ...s.lanterns.flatMap((x) => x.pos)];
     for (const n of nums) assert.equal(Math.round(n * 1000) / 1000, n);
   }
@@ -69,6 +70,11 @@ const bad = [
   ['unknown lantern id', ['--scenario', file('b7.json', { lanterns: [{ id: 'L9' }] })]],
   ['bad shade pos', ['--scenario', file('b8.json', { shades: [{ pos: [1, 2] }] })]],
   ['missing scenario file', ['--scenario', join(tmp, 'does-not-exist.json')]],
+  ['bad shade state', ['--scenario', file('b9.json', { shades: [{ pos: [1, 0, 1], state: 'angry' }] })]],
+  ['bad drifter state', ['--scenario', file('b10.json', { drifters: [{ pos: [1, 0, 1], state: 'zoom' }] })]],
+  ['charm without pos on night 1', ['--scenario', file('b11.json', { charms: [{ id: 'C1' }] })]],
+  ['dash not boolean', ['--inputs', file('b12.json', { frames: [{ tick: 0, dash: 'yes' }] })]],
+  ['pause not boolean', ['--inputs', file('b13.json', { frames: [{ tick: 0, pause: 1 }] })]],
 ];
 for (const [name, extra] of bad) {
   test(`malformed file => exit 2 + stderr: ${name}`, () => {
@@ -79,16 +85,16 @@ for (const [name, extra] of bad) {
 }
 
 test('bad CLI usage => non-zero exit + stderr', () => {
-  for (const args of [[], ['--seed', 'x', '--ticks', '1', '--out', out('u.jsonl')], ['--seed', '1', '--night', '2', '--ticks', '1', '--out', out('u.jsonl')]]) {
+  for (const args of [[], ['--seed', 'x', '--ticks', '1', '--out', out('u.jsonl')], ['--seed', '1', '--night', '4', '--ticks', '1', '--out', out('u.jsonl')]]) {
     const r = runCli(args);
     assert.notEqual(r.code, 0);
     assert.ok(r.stderr.length > 0);
   }
 });
 
-test('performance: 18000 ticks (a whole night) run in well under 5 s', () => {
+test('performance: a full Night 3 (21600 ticks max) runs in well under the 30 s limit (< 5 s)', () => {
   const t0 = process.hrtime.bigint();
-  const r = runCli(['--seed', '9', '--night', '1', '--ticks', '18000', '--out', out('perf.jsonl')]);
+  const r = runCli(['--seed', '9', '--night', '3', '--ticks', '21600', '--out', out('perf.jsonl')]);
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   assert.equal(r.code, 0, r.stderr);
   assert.ok(ms < 5000, `took ${ms} ms`);

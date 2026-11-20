@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Test Contract v1.0 headless runner.
-// node src/headless.js --seed <int> --night 1 [--scenario f.json] [--inputs f.json]
+// Test Contract v1.1 headless runner.
+// node src/headless.js --seed <int> --night <1|2|3> [--scenario f.json] [--inputs f.json]
 //                      --ticks <int> --out <file.jsonl> [--snapshot-every <int, default 10>]
 // Exit 0 on success, 2 on malformed inputs/scenario files, 1 on any other error.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -37,7 +37,7 @@ export function parseArgs(argv) {
   if (opts.seed === undefined) throw new UsageError('--seed is required');
   if (opts.ticks === undefined) throw new UsageError('--ticks is required');
   if (!opts.out) throw new UsageError('--out is required');
-  if (opts.night !== 1) throw new UsageError(`night ${opts.night} is not available (only night 1)`);
+  if (![1, 2, 3].includes(opts.night)) throw new UsageError(`--night must be 1, 2 or 3, got ${opts.night}`);
   return opts;
 }
 
@@ -52,9 +52,10 @@ function readJsonFile(path, label) {
 }
 
 /** Runs the simulation and returns the JSONL lines (without trailing newline). */
-export function runHeadless({ seed, scenario = null, frames = [], ticks, snapshotEvery = 10 }) {
-  const sim = new Sim({ seed, scenario });
+export function runHeadless({ seed, night = 1, scenario = null, frames = [], ticks, snapshotEvery = 10 }) {
+  const sim = new Sim({ seed, night, scenario });
   const lines = [JSON.stringify(sim.snapshot())];
+  lines.push(JSON.stringify({ type: 'event', tick: 0, name: 'night_start', data: { night } }));
   const held = { ...DEFAULT_INPUT, move: [...DEFAULT_INPUT.move] };
   let fi = 0;
   for (let k = 0; k < ticks; k++) {
@@ -64,7 +65,7 @@ export function runHeadless({ seed, scenario = null, frames = [], ticks, snapsho
     }
     for (const e of sim.step(held)) lines.push(JSON.stringify(e));
     if (sim.steps % snapshotEvery === 0) lines.push(JSON.stringify(sim.snapshot()));
-    if (sim.state !== 'playing') break;
+    if (sim.state === 'won' || sim.state === 'lost') break;
   }
   lines.push(JSON.stringify({ type: 'end', ticks: sim.steps, state: sim.state, score: sim.score }));
   return lines;
@@ -73,9 +74,9 @@ export function runHeadless({ seed, scenario = null, frames = [], ticks, snapsho
 export function main(argv) {
   try {
     const opts = parseArgs(argv);
-    const scenario = opts.scenario ? parseScenario(readJsonFile(opts.scenario, 'scenario')) : null;
+    const scenario = opts.scenario ? parseScenario(readJsonFile(opts.scenario, 'scenario'), opts.night) : null;
     const frames = opts.inputs ? parseInputs(readJsonFile(opts.inputs, 'inputs')) : [];
-    const lines = runHeadless({ seed: opts.seed, scenario, frames, ticks: opts.ticks, snapshotEvery: opts.snapshotEvery });
+    const lines = runHeadless({ seed: opts.seed, night: opts.night, scenario, frames, ticks: opts.ticks, snapshotEvery: opts.snapshotEvery });
     const out = resolve(opts.out);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, lines.join('\n') + '\n');

@@ -16,7 +16,7 @@ export function runCli(args) {
 /** Writes scenario/inputs into `dir`, runs the CLI, returns { cmd, code, results, lines }. */
 export function runScenario(sc, dir) {
   mkdirSync(dir, { recursive: true });
-  const args = ['--seed', String(sc.seed), '--night', '1'];
+  const args = ['--seed', String(sc.seed), '--night', String(sc.night ?? 1)];
   if (sc.scenario) {
     writeFileSync(join(dir, 'scenario.json'), JSON.stringify(sc.scenario, null, 2) + '\n');
     args.push('--scenario', join(dir, 'scenario.json'));
