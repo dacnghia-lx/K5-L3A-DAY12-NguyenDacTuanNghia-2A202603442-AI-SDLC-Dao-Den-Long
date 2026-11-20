@@ -12,7 +12,7 @@
     "start": "node scripts/serve.js",
     "headless": "node src/headless.js",
     "test": "node --test",
-    "proof": "node scripts/proof.js"
+    "proof": "node scripts/proof.js phase-2"
   },
   "dependencies": {
     "three": "0.160.0"

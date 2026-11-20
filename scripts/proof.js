@@ -1,7 +1,7 @@
 // Regenerates Phase evidence: runs every scenario through the real CLI, a determinism
 // double-run, bot playthroughs and a perf measurement, then writes docs/proof/<phase>/.
-//   npm run proof            (phase-1 by default)
-//   node scripts/proof.js phase-2
+//   npm run proof            (current phase, see package.json)
+//   node scripts/proof.js phase-N
 import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, platform, release, totalmem } from 'node:os';
@@ -10,7 +10,7 @@ import { SCENARIOS } from '../tests/scenarios.js';
 import { ROOT, runCli, runScenario } from '../tests/harness.js';
 import { playBot } from './bot.js';
 
-const phase = process.argv[2] || 'phase-1';
+const phase = process.argv[2] || 'phase-2';
 const dir = join(ROOT, 'docs', 'proof', phase);
 rmSync(join(dir, 'scenarios'), { recursive: true, force: true });
 rmSync(join(dir, 'playthrough'), { recursive: true, force: true });
@@ -65,21 +65,25 @@ md.push(`- Byte-identical: **${a === b ? 'YES' : 'NO'}**`, '');
 rmSync(runB);
 
 // 3. Playthroughs
-md.push('## 3. Full Night 1 playthroughs (default level, bot inputs replayed via CLI)', '', '| Seed | End line | game_over | Lanterns lit |', '|---|---|---|---|');
-for (const seed of [1, 2, 3, 4, 5]) {
-  const bot = seed === 1 ? bot1 : playBot(seed);
-  const inp = join(pdir, `bot-seed${seed}.inputs.json`);
-  writeFileSync(inp, JSON.stringify({ frames: bot.frames }) + '\n');
-  const out = seed === 1 ? runA : join(pdir, `bot-seed${seed}.jsonl`);
-  if (seed !== 1) runCli(['--seed', String(seed), '--night', '1', '--inputs', inp, '--ticks', '18000', '--out', out]);
-  const lines = readFileSync(out, 'utf8').trim().split('\n');
-  const go = lines.map((l) => JSON.parse(l)).find((o) => o.name === 'game_over');
-  const lit = lines.filter((l) => l.includes('"lantern_lit"')).length;
-  md.push(`| ${seed} | \`${lines.at(-1)}\` | ${go ? JSON.stringify(go.data) : '-'} | ${lit}/5 |`);
-  // keep only events + end for size
-  writeFileSync(seed === 1 ? join(pdir, 'bot-seed1.events.jsonl') : out, lines.filter((l) => !l.includes('"snapshot"')).join('\n') + '\n');
+md.push('## 3. Full-night playthroughs (default level, greedy bot inputs replayed via CLI)', '', '| Night | Seed | End line | game_over | Lanterns lit |', '|---|---|---|---|---|');
+const maxTicks = { 1: 18000, 2: 19800, 3: 21600 };
+for (const [night, seeds] of [[1, [1, 2, 3, 4, 5]], [2, [1, 2, 3]], [3, [1, 2, 3]]]) {
+  for (const seed of seeds) {
+    const bot = night === 1 && seed === 1 ? bot1 : playBot(seed, night);
+    const inp = join(pdir, `bot-n${night}-seed${seed}.inputs.json`);
+    writeFileSync(inp, JSON.stringify({ frames: bot.frames }) + '\n');
+    const out = join(pdir, `bot-n${night}-seed${seed}.events.jsonl`);
+    runCli(['--seed', String(seed), '--night', String(night), '--inputs', inp, '--ticks', String(maxTicks[night]), '--out', out]);
+    const lines = readFileSync(out, 'utf8').trim().split('\n');
+    const go = lines.map((l) => JSON.parse(l)).find((o) => o.name === 'game_over');
+    const lit = lines.filter((l) => l.includes('"lantern_lit"')).length;
+    md.push(`| ${night} | ${seed} | \`${lines.at(-1)}\` | ${go ? JSON.stringify(go.data) : '-'} | ${lit} |`);
+    // keep only events + end for size
+    writeFileSync(out, lines.filter((l) => !l.includes('"snapshot"')).join('\n') + '\n');
+  }
 }
 rmSync(runA);
+rmSync(inputs1);
 md.push('');
 
 // 4. Performance
@@ -87,11 +91,11 @@ md.push('## 4. Performance (headless)', '');
 const perf = [];
 for (let i = 0; i < 3; i++) {
   const t0 = process.hrtime.bigint();
-  runCli(['--seed', '9', '--night', '1', '--ticks', '18000', '--out', join(pdir, 'perf.jsonl')]);
+  runCli(['--seed', '9', '--night', '3', '--ticks', '21600', '--out', join(pdir, 'perf.jsonl')]);
   perf.push(Number(process.hrtime.bigint() - t0) / 1e6);
 }
 rmSync(join(pdir, 'perf.jsonl'));
-md.push(`- 18000 ticks (a full 300 s night, default level, snapshot every 10): ${perf.map((x) => `${x.toFixed(0)} ms`).join(', ')} (includes Node start-up)`, '');
+md.push(`- Night 3, up to 21600 ticks (contract limit: a full night in <= 30 s), default level, snapshot every 10: ${perf.map((x) => `${x.toFixed(0)} ms`).join(', ')} (includes Node start-up)`, '');
 
 md.push('## 5. Scenario details', '', ...details);
 writeFileSync(join(dir, 'headless-report.md'), md.join('\n') + '\n');
