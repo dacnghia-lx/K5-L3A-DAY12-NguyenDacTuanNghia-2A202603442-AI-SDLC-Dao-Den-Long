@@ -22,7 +22,7 @@ Các file trong `scenarios/`, `playthrough/` và `headless-report.md` do script 
 | C-C | Inputs: giữ giá trị, cạnh nút, xoay yaw, chuẩn hóa | `camera-yaw-and-normalize`, `deposit-partial-and-hold`, `pulse-cooldown-cost` | report §1 | Đạt |
 | C-D | Scenario: thay/ cập nhật, không event khi dựng | `scenario-build-silent`, `win-all-lit` | report §1 | Đạt |
 | C-E | Output JSONL, làm tròn, tất định | `tests/cli.test.js` (định dạng), double-run so byte | report §2 | Đạt |
-| — | Hiệu năng headless | 18000 tick (cả đêm) | report §4 | ~0.1–0.2 s |
+| — | Hiệu năng headless | 18000 tick (cả đêm), đo 3 lần | report §4 | ~50 ms mỗi lần (i5-12400F, gồm khởi động Node) |
 
 ## Ảnh chụp (trình duyệt trong app, seed 1)
 
