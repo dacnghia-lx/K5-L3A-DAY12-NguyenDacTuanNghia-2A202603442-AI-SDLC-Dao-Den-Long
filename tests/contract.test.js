@@ -9,7 +9,7 @@ import { ROOT } from './harness.js';
 const contract = JSON.parse(readFileSync(join(ROOT, 'game.contract.json'), 'utf8'));
 
 test('game.contract.json has all v1.0 fields', () => {
-  assert.equal(contract.contract_version, '1.2');
+  assert.equal(contract.contract_version, '1.3');
   for (const k of ['team', 'build_cmd', 'run_cmd', 'headless_cmd']) assert.equal(typeof contract[k], 'string', k);
   const keys = ['player_speed', 'carry_capacity', 'lantern_cost', 'lantern_count_night1', 'pickup_radius', 'interact_radius',
     'pulse_cost', 'pulse_radius', 'night1_duration_s', 'flames', 'invuln_s', 'hit_drop_ratio', 'pulse_stun_s', 'pulse_push_m',

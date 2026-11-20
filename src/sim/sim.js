@@ -64,13 +64,15 @@ export class Sim {
    * @param {object|null} [opts.scenario] validated scenario (see io.js)
    * @param {object} [opts.tuning]
    */
-  constructor({ seed = 0, night = 1, scenario = null, tuning = TUNING } = {}) {
+  constructor({ seed = 0, night = 1, scenario = null, tuning = TUNING, bench = false } = {}) {
     const sc = scenario || {};
     const L = getLevel(night);
     this.t = tuning;
     this.level = L;
     this.night = night;
     this.rng = makeRng(seed);
+    // Ticket-04 benchmark scene: no spawns, damage, pickup, fuel burn or night end; shades only wander.
+    this.bench = bench;
     this.steps = 0; // contract "tick": every step, including paused ones
     this.simTick = 0; // contract "sim_tick": gameplay steps only
     this.paused = false;
@@ -389,14 +391,14 @@ export class Sim {
         if (c.respawn === 0) c.available = true;
       }
     }
-    this.burnFuel(ev);
+    if (!this.bench) this.burnFuel(ev);
 
     // 3. Move Mây (jump, dash, pads, wind), then the fall check.
     this.updateWind();
     this.movePlayer(input, edge, ev);
 
     // 4. Pick up fireflies and charms.
-    if (p.fallWait === 0) this.pickup(ev);
+    if (p.fallWait === 0 && !this.bench) this.pickup(ev);
 
     // 5. Lanterns.
     if (p.fallWait === 0 && edge.interact) this.interact(ev);
@@ -412,12 +414,13 @@ export class Sim {
     this.moveDrifters();
 
     // 9. Contacts: drifters steal first, then one shade hit (ascending id).
-    if (p.fallWait === 0) this.contacts(ev);
+    if (p.fallWait === 0 && !this.bench) this.contacts(ev);
 
     // 10. Scheduled spawns (new entities interact from the next tick).
-    this.spawns(ev);
+    if (!this.bench) this.spawns(ev);
 
     // 11. Win / lose (Ticket-03 §3): no flames always loses first; otherwise only dawn ends the night.
+    if (this.bench) return events;
     if (p.flames <= 0) this.endGame('lost', 'no_flames', ev);
     else if (this.timeLeft() <= EPS) {
       if (this.litCount() >= this.winThreshold()) this.endGame('won', 'dawn_survived', ev);
@@ -822,7 +825,7 @@ export class Sim {
             }
             s.drainTicks = 0;
           }
-          if (s.state === 'wander' && this.playerTargetable() && d <= WORLD.shade_detect_m + EPS) s.state = 'chase';
+          if (s.state === 'wander' && !this.bench && this.playerTargetable() && d <= WORLD.shade_detect_m + EPS) s.state = 'chase';
           else if (s.state === 'chase' && (!this.playerTargetable() || d > WORLD.shade_lose_m + EPS)) s.state = 'wander';
           if (s.state === 'chase') this.moveToward(s, p.pos, speed);
           else this.wander(s);
@@ -1014,4 +1017,26 @@ export class Sim {
       charms: this.charms.map((c) => ({ id: c.id, available: c.available, respawn_s: secs(c.available ? 0 : c.respawn) })),
     };
   }
+}
+
+/**
+ * Ticket-04 §1 benchmark scene (same for everyone): Night 1, exactly 200 wandering shades and 100
+ * fireflies spread uniformly over the island from the seed, L1-L3 lit with fuel 100, Mây at (0,0,0).
+ */
+export function benchScenario(seed = 42) {
+  const rng = makeRng(seed);
+  const point = (rMin, rMax, y) => {
+    const r = Math.sqrt(rng.range(rMin * rMin, rMax * rMax));
+    const a = rng.range(0, 2 * Math.PI);
+    return [round3(r * Math.cos(a)), y, round3(r * Math.sin(a))];
+  };
+  return {
+    random_motes: false,
+    random_shades: false,
+    random_drifters: false,
+    player: { pos: [0, 0, 0] },
+    motes: Array.from({ length: 100 }, () => ({ pos: point(3, 38, 0) })),
+    shades: Array.from({ length: 200 }, (_, i) => ({ id: `S${i + 1}`, pos: point(3, 38, WORLD.shade_height), state: 'wander' })),
+    lanterns: [{ id: 'L1', lit: true, fuel: 100 }, { id: 'L2', lit: true, fuel: 100 }, { id: 'L3', lit: true, fuel: 100 }],
+  };
 }
