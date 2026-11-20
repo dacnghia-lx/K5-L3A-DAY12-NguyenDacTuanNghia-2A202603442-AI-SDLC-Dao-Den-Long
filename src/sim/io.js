@@ -1,4 +1,4 @@
-// Parsing/validation of Test Contract v1.1 inputs and scenario files.
+// Parsing/validation of Test Contract v1.2 inputs and scenario files.
 // Any malformed file -> FormatError (headless exits with code 2).
 import { TUNING } from './tuning.js';
 import { getLevel } from './levels.js';
@@ -173,6 +173,11 @@ export function parseScenario(obj, night = 1, tuning = TUNING) {
         out.pos = [...l.pos];
       }
       optBool(l, 'lit', where, out);
+      optBool(l, 'ever_lit', where, out);
+      if (l.fuel !== undefined) {
+        if (!isNum(l.fuel) || l.fuel < 0 || l.fuel > tuning.fuel_max) fail(`${where}.fuel: number in [0, ${tuning.fuel_max}] required`);
+        out.fuel = l.fuel;
+      }
       if (l.deposited !== undefined) {
         if (!isCount(l.deposited)) fail(`${where}.deposited: non-negative integer required`);
         out.deposited = Math.min(l.deposited, tuning.lantern_cost);

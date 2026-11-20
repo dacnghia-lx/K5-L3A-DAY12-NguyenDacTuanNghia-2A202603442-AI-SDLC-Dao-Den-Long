@@ -53,7 +53,9 @@ test('output format: snapshot first, end line last, every line valid JSON, coord
   assert.equal(snaps.length, 61);
   for (const s of snaps) {
     for (const k of ['tick', 'sim_tick', 'state', 'night', 'time_left_s', 'score', 'wind', 'player', 'lanterns', 'shades', 'motes_active', 'motes', 'drifters', 'charms']) assert.ok(k in s, k);
-    for (const st of s.shades.map((x) => x.state)) assert.ok(['spawning', 'wander', 'chase', 'recoil', 'stunned'].includes(st), st);
+    for (const st of s.shades.map((x) => x.state)) assert.ok(['spawning', 'wander', 'chase', 'recoil', 'stunned', 'drain'].includes(st), st);
+    for (const l of s.lanterns) for (const k of ['fuel', 'ever_lit', 'relit_count']) assert.ok(k in l, k);
+    assert.ok('capacity' in s.player);
     const nums = [...s.player.pos, ...s.shades.flatMap((x) => x.pos), ...s.lanterns.flatMap((x) => x.pos)];
     for (const n of nums) assert.equal(Math.round(n * 1000) / 1000, n);
   }
@@ -75,6 +77,8 @@ const bad = [
   ['charm without pos on night 1', ['--scenario', file('b11.json', { charms: [{ id: 'C1' }] })]],
   ['dash not boolean', ['--inputs', file('b12.json', { frames: [{ tick: 0, dash: 'yes' }] })]],
   ['pause not boolean', ['--inputs', file('b13.json', { frames: [{ tick: 0, pause: 1 }] })]],
+  ['lantern fuel out of range', ['--scenario', file('b14.json', { lanterns: [{ id: 'L1', lit: true, fuel: 150 }] })]],
+  ['ever_lit not boolean', ['--scenario', file('b15.json', { lanterns: [{ id: 'L1', ever_lit: 'yes' }] })]],
 ];
 for (const [name, extra] of bad) {
   test(`malformed file => exit 2 + stderr: ${name}`, () => {

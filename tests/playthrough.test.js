@@ -10,10 +10,12 @@ const tmp = mkdtempSync(join(tmpdir(), 'ddl-bot-'));
 
 // Whole nights played by the greedy bot in-process, then replayed through the real CLI:
 // the CLI must reach exactly the same end (same tick, state and score).
-// Night 1 seed 3 is a known win with the Ticket-02 standard numbers; Nights 2/3 the bot
-// survives but loses (see docs/notes/phase-2.md, honest limits) — the replay must still match.
+// Phase 2: Night 1 seed 3 was a bot win. Ticket-03 removed the early win (win only at dawn with
+// enough lanterns still lit) and the greedy bot no longer survives to dawn, so the "won" expectation
+// was dropped (reason in docs/notes/phase-3.md §4). The dawn win itself is covered by the
+// `dawn-survived` scenario. The replay must still match exactly.
 const CASES = [
-  { night: 1, seed: 3, expect: 'won' },
+  { night: 1, seed: 3, expect: null },
   { night: 2, seed: 2, expect: null },
   { night: 3, seed: 1, expect: null },
 ];

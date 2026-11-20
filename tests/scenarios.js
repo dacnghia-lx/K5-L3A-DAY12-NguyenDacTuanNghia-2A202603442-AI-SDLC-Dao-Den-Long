@@ -1,4 +1,4 @@
-// Headless scenarios (Phase 2 / Contract v1.1). Each one is run through the REAL CLI
+// Headless scenarios (Phase 3 / Contract v1.2). Each one is run through the REAL CLI
 // (src/headless.js) by tests/scenarios.test.js and by scripts/proof.js.
 // `req` links the scenario to a requirement id in docs/notes/phase-N.md.
 // Expected numbers are derived by hand from the Ticket-02 standard values.
@@ -66,23 +66,24 @@ export const SCENARIOS = [
   {
     name: 'deposit-light',
     req: 'P2-1',
-    what: 'Interact within 2.0 m deposits; lantern_cost 10 lights it: 10 x 10 + 100 = 200',
+    what: 'Interact within 2.0 m deposits; lantern_cost 10 lights it: 10 x 5 + 100 = 150; fuel 100, capacity 12',
     seed: 1, ticks: 3, every: 1,
     scenario: { ...NO_RANDOM, player: { pos: [0, 0, 0], carried: 10 }, lanterns: [{ id: 'L1', pos: [0, 0, 2] }] },
     inputs: { frames: [{ tick: 0, interact: true }] },
     check: (r, ok) => {
       const d = r.events('deposit');
       ok(d.length === 1 && d[0].tick === 1 && d[0].data.lantern_id === 'L1' && d[0].data.amount === 10 && d[0].data.deposited === 10, `deposit L1 10/10 at tick 1 (got ${JSON.stringify(d)})`);
-      ok(r.events('lantern_lit').length === 1 && r.events('lantern_lit')[0].data.lantern_id === 'L1', 'lantern_lit L1');
+      ok(r.events('lantern_lit').length === 1 && r.events('lantern_lit')[0].data.lantern_id === 'L1' && r.events('lantern_lit')[0].data.relight === false, 'lantern_lit L1 relight:false');
       const l1 = r.snap(1).lanterns.find((l) => l.id === 'L1');
       ok(l1.lit === true && l1.deposited === 10 && r.snap(1).player.carried === 0, 'L1 lit, player carried 0');
-      ok(r.snap(1).score === 200, `score 200 (got ${r.snap(1).score})`);
+      ok(r.snap(1).score === 150, `score 150 (got ${r.snap(1).score})`);
+      ok(l1.fuel === 100 && l1.ever_lit === true && r.snap(1).player.capacity === 12, `fuel 100, ever_lit, capacity 12 (got ${JSON.stringify(l1)}, cap ${r.snap(1).player.capacity})`);
     },
   },
   {
     name: 'deposit-partial-and-hold',
     req: 'P2-1',
-    what: 'Partial deposit (3 of 10) keeps the lantern unlit (+30); holding interact does not repeat',
+    what: 'Partial deposit (3 of 10) keeps the lantern unlit (+15); holding interact does not repeat',
     seed: 1, ticks: 30, every: 10,
     scenario: { ...NO_RANDOM, player: { carried: 3 }, lanterns: [{ id: 'L1', pos: [1, 0, 0] }] },
     inputs: { frames: [{ tick: 0, interact: true }] },
@@ -90,7 +91,7 @@ export const SCENARIOS = [
       const d = r.events('deposit');
       ok(d.length === 1 && d[0].data.amount === 3 && d[0].data.deposited === 3, `one deposit of 3 (got ${JSON.stringify(d)})`);
       ok(r.events('lantern_lit').length === 0, 'not lit');
-      ok(r.snap(30).lanterns.find((l) => l.id === 'L1').deposited === 3 && r.snap(30).score === 30, 'L1 deposited 3, score 30');
+      ok(r.snap(30).lanterns.find((l) => l.id === 'L1').deposited === 3 && r.snap(30).score === 15, 'L1 deposited 3, score 15');
     },
   },
   {
@@ -118,9 +119,9 @@ export const SCENARIOS = [
     },
   },
   {
-    name: 'win-all-lit',
-    req: 'P2-1',
-    what: 'Lighting the last lantern wins: 10 + 100 + floor(299.983) x 2 + 3 x 50 = 858; pre-lit lanterns give no points',
+    name: 'no-early-win',
+    req: 'P3-3',
+    what: '[replaces win-all-lit] Lighting the last lantern no longer ends the night: +5 +100 = 105, still playing',
     seed: 1, ticks: 100, every: 1,
     scenario: {
       ...NO_RANDOM,
@@ -130,29 +131,43 @@ export const SCENARIOS = [
     },
     inputs: { frames: [{ tick: 0, interact: true }] },
     check: (r, ok) => {
-      const g = r.events('game_over');
-      ok(g.length === 1 && g[0].tick === 1 && g[0].data.result === 'won' && g[0].data.reason === 'all_lit', `game_over won/all_lit at tick 1 (got ${JSON.stringify(g)})`);
-      ok(r.end.type === 'end' && r.end.state === 'won' && r.end.ticks === 1, `end won after 1 tick (got ${JSON.stringify(r.end)})`);
-      ok(r.end.score === 858, `score 858 (got ${r.end.score})`);
+      ok(r.events('game_over').length === 0 && r.end.state === 'playing' && r.end.ticks === 100, `no game_over (got ${JSON.stringify(r.end)})`);
+      ok(r.snap(1).lanterns.every((l) => l.lit) && r.snap(1).score === 105, `all lit, score 105 (got ${r.snap(1).score})`);
       ok(r.snap(0).score === 0, 'score 0 at build (pre-lit lanterns not scored)');
     },
   },
   {
-    name: 'win-on-dawn-tick',
-    req: 'P2-1',
-    what: 'All lanterns lit on the very last tick still wins (win is checked before dawn): bonus floor(0) x 2 + 150',
+    name: 'dawn-survived',
+    req: 'P3-3',
+    what: '[replaces win-on-dawn-tick] Alive at dawn with 3/5 lit (= ceil(0.6 x 5)) wins dawn_survived: 3 x (50 + floor(99.0)) + 3 x 50 = 597',
     seed: 1, ticks: 100, every: 1,
-    scenario: {
-      ...NO_RANDOM,
-      player: { carried: 10 },
-      lanterns: [{ id: 'L1', lit: true }, { id: 'L2', lit: true }, { id: 'L3', lit: true }, { id: 'L4', lit: true }, { id: 'L5', pos: [0, 0, 2] }],
-      time_left_s: 0.5,
-    },
-    inputs: { frames: [{ tick: 29, interact: true }] },
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', lit: true }, { id: 'L2', lit: true }, { id: 'L3', lit: true }], time_left_s: 1 },
     check: (r, ok) => {
       const g = r.events('game_over');
-      ok(g.length === 1 && g[0].tick === 30 && g[0].data.result === 'won', `won at tick 30 = dawn tick (got ${JSON.stringify(g)})`);
-      ok(r.end.score === 100 + 100 + 150, `score 350 (got ${r.end.score})`);
+      ok(g.length === 1 && g[0].tick === 60 && g[0].data.result === 'won' && g[0].data.reason === 'dawn_survived', `won/dawn_survived at 60 (got ${JSON.stringify(g)})`);
+      ok(r.end.score === 597, `score 597 (got ${r.end.score})`);
+    },
+  },
+  {
+    name: 'dawn-below-threshold',
+    req: 'P3-3',
+    what: 'Night 2 needs ceil(0.6 x 6) = 4 lit at dawn: with 3 lit the night is lost/dawn',
+    seed: 1, night: 2, ticks: 100, every: 10,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', lit: true }, { id: 'L2', lit: true }, { id: 'L3', lit: true }], time_left_s: 1 },
+    check: (r, ok) => {
+      const g = r.events('game_over');
+      ok(g.length === 1 && g[0].tick === 60 && g[0].data.result === 'lost' && g[0].data.reason === 'dawn', `lost/dawn (got ${JSON.stringify(g)})`);
+    },
+  },
+  {
+    name: 'no-flames-beats-dawn',
+    req: 'P3-3',
+    what: 'Losing the last flame on the dawn tick loses no_flames even with enough lanterns lit',
+    seed: 1, ticks: 10, every: 1,
+    scenario: { ...NO_RANDOM, player: { flames: 1 }, shades: [{ id: 'S1', pos: [1.18, 1, 0] }], lanterns: [{ id: 'L1', lit: true }, { id: 'L2', lit: true }, { id: 'L3', lit: true }], time_left_s: 0.05 },
+    check: (r, ok) => {
+      const g = r.events('game_over');
+      ok(g.length === 1 && g[0].tick === 3 && g[0].data.reason === 'no_flames', `no_flames at tick 3 (got ${JSON.stringify(g)})`);
     },
   },
   {
@@ -336,7 +351,7 @@ export const SCENARIOS = [
       ok(JSON.stringify(r.snaps.map((s) => s.tick)) === '[0,3,6]', `snapshot ticks (got ${r.snaps.map((s) => s.tick)})`);
       ok(r.snaps.every((s) => s.sim_tick === s.tick && s.night === 1), 'sim_tick == tick, night 1');
       ok(r.end.ticks === 7 && r.end.state === 'playing', `end ticks 7 (got ${JSON.stringify(r.end)})`);
-      ok(r.snap(6).time_left_s === 299.9, `time_left 299.9 at tick 6 (got ${r.snap(6).time_left_s})`);
+      ok(r.snap(6).time_left_s === 239.9, `time_left 239.9 at tick 6 (Night 1 = 240 s) (got ${r.snap(6).time_left_s})`);
     },
   },
   {
@@ -383,7 +398,7 @@ export const SCENARIOS = [
   {
     name: 'default-level-night1',
     req: 'P2-2',
-    what: 'Default Night 1: standard lantern positions, 20 fireflies on 20 distinct standard points, no shades yet, 300 s',
+    what: 'Default Night 1: standard lantern positions, 20 fireflies on 20 distinct standard points, no shades yet, 240 s',
     seed: 7, ticks: 10, every: 10,
     check: (r, ok) => {
       const s0 = r.snap(0);
@@ -391,18 +406,19 @@ export const SCENARIOS = [
       const pts = new Set(s0.motes.map((m) => m.pos.join()));
       const onRing = s0.motes.every((m) => near(Math.hypot(m.pos[0], m.pos[2]), 12) || near(Math.hypot(m.pos[0], m.pos[2]), 33));
       ok(s0.motes_active === 20 && pts.size === 20 && onRing, 'twenty distinct points on r=12 / r=33');
-      ok(s0.shades.length === 0 && s0.time_left_s === 300 && s0.player.flames === 3 && s0.state === 'playing', 'no shades, 300 s, 3 flames');
+      ok(s0.shades.length === 0 && s0.time_left_s === 240 && s0.player.flames === 3 && s0.state === 'playing', 'no shades, 240 s, 3 flames');
+      ok(s0.lanterns.every((l) => l.fuel === 0 && l.ever_lit === false && l.relit_count === 0) && s0.player.capacity === 10, 'v1.2 lantern fields, capacity 10');
     },
   },
   {
     name: 'default-level-night3',
     req: 'P2-2',
-    what: 'Default Night 3: 7 lanterns (L1 on the tier-2 disk at Y=6), 2 charms, 360 s, wind enabled',
+    what: 'Default Night 3: 7 lanterns (L1 on the tier-2 disk at Y=6), 2 charms, 300 s, wind enabled',
     seed: 7, night: 3, ticks: 1, every: 1,
     check: (r, ok) => {
       const s0 = r.snap(0);
       ok(s0.lanterns.length === 7 && JSON.stringify(s0.lanterns[0].pos) === '[0,6,6]', 'seven lanterns, L1 (0,6,6)');
-      ok(s0.charms.length === 2 && s0.time_left_s === 360 && s0.night === 3, 'two charms, 360 s');
+      ok(s0.charms.length === 2 && s0.time_left_s === 300 && s0.night === 3, 'two charms, 300 s');
       ok(s0.motes.every((m) => [0, 3, 6].includes(m.pos[1])), 'fireflies sit on tiers 0/3/6');
     },
   },
@@ -662,6 +678,164 @@ export const SCENARIOS = [
       const a = (r.snap(1800).wind.dir_deg * Math.PI) / 180;
       const dx = r.snap(2099).player.pos[0] - r.snap(1799).player.pos[0];
       ok(near(dx, 10 * Math.cos(a), 0.01), 'along dir_deg (angle from +X towards +Z)');
+    },
+  },
+  // ---------------- Phase 3 (Ticket-03 change request) ----------------
+  {
+    name: 'fuel-decay',
+    req: 'P3-1',
+    what: 'A lit lantern burns 1 fuel/s: 100 -> 99.0 after 60 ticks -> 90.0 after 600 (integer 1/60 units, 1 decimal out)',
+    seed: 1, ticks: 600, every: 60,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', lit: true }] },
+    check: (r, ok) => {
+      const f = (t) => r.snap(t).lanterns[0].fuel;
+      ok(f(0) === 100 && f(60) === 99 && f(600) === 90, `100, 99, 90 (got ${f(0)}, ${f(60)}, ${f(600)})`);
+    },
+  },
+  {
+    name: 'lantern-out',
+    req: 'P3-1',
+    what: 'fuel 1 runs out after 60 ticks: lantern_out, lit=false, deposited=0, fuel 0, ever_lit stays true',
+    seed: 1, ticks: 70, every: 1,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', lit: true, fuel: 1 }] },
+    check: (r, ok) => {
+      const o = r.events('lantern_out');
+      ok(o.length === 1 && o[0].tick === 60 && o[0].data.lantern_id === 'L1', `lantern_out at 60 (got ${JSON.stringify(o)})`);
+      const l = r.snap(60).lanterns[0];
+      ok(l.lit === false && l.deposited === 0 && l.fuel === 0 && l.ever_lit === true, `out (got ${JSON.stringify(l)})`);
+      ok(r.snap(59).lanterns[0].lit === true, 'still lit at 59');
+    },
+  },
+  {
+    name: 'refuel',
+    req: 'P3-1',
+    what: 'Interact at a lit lantern with fuel 49.983: used = min(7, ceil(50.017/10)) = 6, fuel -> 100, +30, refuel event',
+    seed: 1, ticks: 2, every: 1,
+    scenario: { ...NO_RANDOM, player: { carried: 7 }, lanterns: [{ id: 'L1', pos: [0, 0, 1.5], lit: true, fuel: 50 }] },
+    inputs: { frames: [{ tick: 0, interact: true }] },
+    check: (r, ok) => {
+      const e = r.events('refuel');
+      ok(e.length === 1 && e[0].tick === 1 && e[0].data.lantern_id === 'L1' && e[0].data.amount === 6 && e[0].data.fuel === 100, `refuel 6 -> 100 (got ${JSON.stringify(e)})`);
+      ok(r.snap(1).player.carried === 1 && r.snap(1).score === 30 && r.events('deposit').length === 0, 'carried 1, score 30, no deposit event');
+    },
+  },
+  {
+    name: 'refuel-picks-nearest-accepting',
+    req: 'P3-1',
+    what: 'A lit lantern that is not full is a valid interact target and wins over a farther unlit one',
+    seed: 1, ticks: 2, every: 1,
+    scenario: { ...NO_RANDOM, player: { carried: 2 }, lanterns: [{ id: 'L1', pos: [1.9, 0, 0] }, { id: 'L2', pos: [0, 0, 1], lit: true, fuel: 80 }] },
+    inputs: { frames: [{ tick: 0, interact: true }] },
+    check: (r, ok) => {
+      ok(r.events('refuel').length === 1 && r.events('refuel')[0].data.lantern_id === 'L2' && r.events('deposit').length === 0, 'refuels L2');
+    },
+  },
+  {
+    name: 'relight',
+    req: 'P3-1,P3-5',
+    what: 'A lantern that was lit before (ever_lit) relights with 5: +5 x 5 + 40 = 65, relight:true, fuel 100, relit_count 1',
+    seed: 1, ticks: 2, every: 1,
+    scenario: { ...NO_RANDOM, player: { carried: 7 }, lanterns: [{ id: 'L1', pos: [0, 0, 1.5], ever_lit: true }] },
+    inputs: { frames: [{ tick: 0, interact: true }] },
+    check: (r, ok) => {
+      const d = r.events('deposit');
+      ok(d.length === 1 && d[0].data.amount === 5 && d[0].data.deposited === 5, `deposit 5 (got ${JSON.stringify(d)})`);
+      const lit = r.events('lantern_lit');
+      ok(lit.length === 1 && lit[0].data.relight === true, `relight:true (got ${JSON.stringify(lit)})`);
+      const l = r.snap(1).lanterns[0];
+      ok(l.lit && l.fuel === 100 && l.relit_count === 1 && r.snap(1).score === 65 && r.snap(1).player.carried === 2, `score 65 (got ${r.snap(1).score}, ${JSON.stringify(l)})`);
+    },
+  },
+  {
+    name: 'drain-until-out',
+    req: 'P3-2',
+    what: 'Wandering shade 1 m from a lit lantern with fuel 25 (< 30): drain from tick 2 at 5/s + 1/s decay; fuel_drain every 60 ticks; out at tick 251',
+    seed: 1, ticks: 300, every: 10,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', pos: [20, 0, 0], lit: true, fuel: 25 }], shades: [{ id: 'S1', pos: [21, 1, 0] }] },
+    check: (r, ok) => {
+      const fd = r.events('fuel_drain').map((e) => `${e.tick}:${e.data.lantern_id}:${e.data.shade_id}:${e.data.fuel}`);
+      ok(fd.join() === '61:L1:S1:19,121:L1:S1:13,181:L1:S1:7,241:L1:S1:1', `fuel_drain (got ${fd.join()})`);
+      ok(r.events('lantern_out').map((e) => e.tick).join() === '251', 'out at 251 (1499 units / 6 per tick after tick 1)');
+      ok(shade(r, 10, 'S1').state === 'drain' && shade(r, 260, 'S1').state === 'wander', 'drain -> wander when the lantern goes out');
+    },
+  },
+  {
+    name: 'drain-two-shades-add-up',
+    req: 'P3-2',
+    what: 'Two draining shades add up: 1 + 5 + 5 = 11 units/tick',
+    seed: 1, ticks: 60, every: 60,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', pos: [20, 0, 0], lit: true, fuel: 25 }], shades: [{ id: 'S1', pos: [21, 1, 0], state: 'drain', target_lantern_id: 'L1' }, { id: 'S2', pos: [19, 1, 0], state: 'drain', target_lantern_id: 'L1' }] },
+    check: (r, ok) => {
+      ok(r.snap(60).lanterns[0].fuel === 14, `fuel 14.0 (got ${r.snap(60).lanterns[0].fuel})`);
+    },
+  },
+  {
+    name: 'safe-zone-needs-30',
+    req: 'P3-2',
+    what: 'Fuel 30.5: safe zone holds while fuel >= 30 (first 30 ticks); then the wandering shade walks in and drains',
+    seed: 1, ticks: 400, every: 1,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', pos: [20, 0, 0], lit: true, fuel: 30.5 }], shades: [{ id: 'S1', pos: [27, 1, 0] }] },
+    check: (r, ok) => {
+      let inside = false;
+      for (let t = 1; t <= 30; t++) if (dXZ(shade(r, t, 'S1').pos, [20, 0, 0]) < 6 - 1e-3) inside = true;
+      ok(!inside, 'no entry while fuel >= 30');
+      ok(r.snaps.some((s) => s.shades[0].state === 'drain'), 'drains once fuel < 30');
+    },
+  },
+  {
+    name: 'drain-to-chase',
+    req: 'P3-2',
+    what: 'A draining shade turns to chase when Mây comes within 6 m (Mây walks from x=10 to 15 by tick 50)',
+    seed: 1, ticks: 60, every: 1,
+    scenario: { ...NO_RANDOM, lanterns: [{ id: 'L1', pos: [20, 0, 0], lit: true, fuel: 25 }], shades: [{ id: 'S1', pos: [21, 1, 0], state: 'drain', target_lantern_id: 'L1' }], player: { pos: [10, 0, 0] } },
+    inputs: { frames: [{ tick: 0, move: [1, 0] }] },
+    check: (r, ok) => {
+      ok(shade(r, 49, 'S1').state === 'drain' && shade(r, 50, 'S1').state === 'chase', `drain at 49, chase at 50 (got ${shade(r, 49, 'S1').state}, ${shade(r, 50, 'S1').state})`);
+    },
+  },
+  {
+    name: 'drain-pulse-15',
+    req: 'P3-2,P3-5',
+    what: 'Pulse hitting a draining shade scores 15 (instead of 5) and stuns it',
+    seed: 1, ticks: 2, every: 1,
+    scenario: { ...NO_RANDOM, player: { pos: [17, 0, 0], carried: 3 }, lanterns: [{ id: 'L1', pos: [20, 0, 0], lit: true, fuel: 25 }], shades: [{ id: 'S1', pos: [21, 1, 0], state: 'drain', target_lantern_id: 'L1' }] },
+    inputs: { frames: [{ tick: 0, pulse: true }] },
+    check: (r, ok) => {
+      ok(r.snap(1).score === 15 && shade(r, 1, 'S1').state === 'stunned', `score 15, stunned (got ${r.snap(1).score})`);
+    },
+  },
+  {
+    name: 'refuel-evicts-drainers',
+    req: 'P3-2',
+    what: 'Refuelling a weak lantern to >= 30 pushes shades inside its 6 m zone out within 30 ticks, without damage',
+    seed: 1, ticks: 200, every: 1,
+    scenario: { ...NO_RANDOM, player: { pos: [0, 0, 1.5], carried: 10 }, lanterns: [{ id: 'L1', pos: [0, 0, 3], lit: true, fuel: 20 }], shades: [{ id: 'S1', pos: [1, 1, 4.5], state: 'drain', target_lantern_id: 'L1' }] },
+    inputs: { frames: [{ tick: 0, interact: true }] },
+    check: (r, ok) => {
+      const e = r.events('refuel');
+      ok(e.length === 1 && e[0].data.amount === 9 && e[0].data.fuel === 100, `refuel 9 -> 100 (1194 units after tick 1) (got ${JSON.stringify(e)})`);
+      ok(dXZ(shade(r, 30, 'S1').pos, [0, 0, 3]) >= 6 - 1e-3, `pushed to the edge by tick 30 (got ${dXZ(shade(r, 30, 'S1').pos, [0, 0, 3])})`);
+      ok(r.events('player_hit').length === 0, 'no damage');
+    },
+  },
+  {
+    name: 'capacity-growth',
+    req: 'P3-4',
+    what: 'Capacity = 10 + 2 x successful_lights, max 20: 3 lights -> 16 of 18 fireflies picked',
+    seed: 1, ticks: 2, every: 1,
+    scenario: { ...NO_RANDOM, player: { successful_lights: 3 }, motes: Array.from({ length: 18 }, (_, i) => [0.04 * i, 0, 0]) },
+    check: (r, ok) => {
+      ok(r.snap(1).player.carried === 16 && r.snap(1).player.capacity === 16, `16/16 (got ${r.snap(1).player.carried}/${r.snap(1).player.capacity})`);
+    },
+  },
+  {
+    name: 'capacity-max-20',
+    req: 'P3-4',
+    what: '6 lights would give 22 but capacity stops at 20',
+    seed: 1, ticks: 2, every: 1,
+    scenario: { ...NO_RANDOM, player: { successful_lights: 6 }, motes: Array.from({ length: 22 }, (_, i) => [0.04 * i, 0, 0]) },
+    check: (r, ok) => {
+      ok(r.snap(1).player.carried === 20 && r.snap(1).player.capacity === 20, `20/20 (got ${r.snap(1).player.carried}/${r.snap(1).player.capacity})`);
     },
   },
 ];

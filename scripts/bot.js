@@ -91,10 +91,17 @@ export function playBot(seed, night = 1, maxTicks = 21600) {
 
   for (let k = 0; k < maxTicks && (sim.state === 'playing'); k++) {
     const p = sim.player;
+    // Ticket-03: win = enough lanterns lit AT DAWN. Keep the lit ones fuelled first, then light more
+    // until one above the threshold.
+    const nearestOf = (ls) => ls.reduce((b, l) => (!b || pathCost(night, p.pos, l.pos) < pathCost(night, p.pos, b.pos) ? l : b), null);
+    const low = sim.lanterns.filter((l) => l.lit && l.fuel < 45 * 60);
     const unlit = sim.lanterns.filter((l) => !l.lit);
-    const goal = unlit.reduce((b, l) => (!b || pathCost(night, p.pos, l.pos) < pathCost(night, p.pos, b.pos) ? l : b), null);
-    const need = goal ? t.lantern_cost - goal.deposited : 0;
-    const threats = sim.shades.filter((s) => (s.state === 'chase' || s.state === 'wander') && dXZ(s.pos, p.pos) < 4.6);
+    const want = Math.min(sim.lanterns.length, sim.winThreshold() + 1);
+    let goal = nearestOf(low);
+    if (!goal && sim.litCount() < want) goal = nearestOf(unlit);
+    if (!goal) goal = sim.lanterns.filter((l) => l.lit).reduce((b, l) => (!b || l.fuel < b.fuel ? l : b), null);
+    const need = !goal ? 0 : goal.lit ? sim.refuelNeed(goal) : sim.costOf(goal) - goal.deposited;
+    const threats = sim.shades.filter((s) => (s.state === 'chase' || s.state === 'wander' || s.state === 'drain') && dXZ(s.pos, p.pos) < 4.6);
     const threat = threats.reduce((b, s) => (!b || dXZ(s.pos, p.pos) < dXZ(b.pos, p.pos) ? s : b), null);
     const thief = sim.drifters.find((d) => d.state === 'chase' && dXZ(d.pos, p.pos) < 4);
 

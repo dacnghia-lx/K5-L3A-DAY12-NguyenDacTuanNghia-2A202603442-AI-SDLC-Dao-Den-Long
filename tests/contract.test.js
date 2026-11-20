@@ -9,21 +9,24 @@ import { ROOT } from './harness.js';
 const contract = JSON.parse(readFileSync(join(ROOT, 'game.contract.json'), 'utf8'));
 
 test('game.contract.json has all v1.0 fields', () => {
-  assert.equal(contract.contract_version, '1.1');
+  assert.equal(contract.contract_version, '1.2');
   for (const k of ['team', 'build_cmd', 'run_cmd', 'headless_cmd']) assert.equal(typeof contract[k], 'string', k);
   const keys = ['player_speed', 'carry_capacity', 'lantern_cost', 'lantern_count_night1', 'pickup_radius', 'interact_radius',
     'pulse_cost', 'pulse_radius', 'night1_duration_s', 'flames', 'invuln_s', 'hit_drop_ratio', 'pulse_stun_s', 'pulse_push_m',
     'pulse_cooldown_s', 'safe_radius', 'shade_speed', 'shade_hit_radius', 'fall_enabled', 'score',
-    'dash_speed', 'dash_duration_s', 'dash_cooldown_s', 'night2_duration_s', 'night3_duration_s'];
+    'dash_speed', 'dash_duration_s', 'dash_cooldown_s', 'night2_duration_s', 'night3_duration_s',
+    'fuel_max', 'fuel_decay_per_s', 'fuel_per_mote', 'relight_cost', 'win_ratio', 'drain_per_s', 'low_fuel_threshold', 'capacity_max'];
   for (const k of keys) assert.ok(k in contract.tuning, k);
   for (const k of ['per_mote', 'per_lantern', 'per_stun', 'per_second_left', 'per_flame_left']) assert.ok(k in contract.tuning.score, k);
   assert.equal(contract.tuning.lantern_count_night1, 5);
   // Ticket-02 Part 1 standard values
   const std = { player_speed: 6, carry_capacity: 10, lantern_cost: 10, pickup_radius: 1, interact_radius: 2, pulse_cost: 3, pulse_radius: 5,
     pulse_cooldown_s: 3, safe_radius: 6, shade_speed: 4, shade_hit_radius: 1, flames: 3, invuln_s: 1.5, pulse_stun_s: 2, pulse_push_m: 4,
-    dash_speed: 14, dash_duration_s: 0.2, dash_cooldown_s: 1.5, night1_duration_s: 300, night2_duration_s: 330, night3_duration_s: 360, fall_enabled: true };
+    dash_speed: 14, dash_duration_s: 0.2, dash_cooldown_s: 1.5, night1_duration_s: 240, night2_duration_s: 270, night3_duration_s: 300, fall_enabled: true,
+    fuel_max: 100, fuel_decay_per_s: 1, fuel_per_mote: 10, relight_cost: 5, win_ratio: 0.6, drain_per_s: 5, low_fuel_threshold: 30, capacity_max: 20 };
   for (const [k, v] of Object.entries(std)) assert.equal(contract.tuning[k], v, k);
-  assert.deepEqual(contract.tuning.score, { per_mote: 10, per_lantern: 100, per_stun: 5, per_second_left: 2, per_flame_left: 50 });
+  // Ticket-03 §5 score (time bonus removed -> per_second_left 0)
+  assert.deepEqual(contract.tuning.score, { per_mote: 5, per_lantern: 100, per_relight: 40, per_stun: 5, per_stun_drain: 15, per_lit_at_dawn: 50, per_second_left: 0, per_flame_left: 50 });
 });
 
 test('declared tuning == tuning the game actually uses (src/sim/tuning.js)', () => {
