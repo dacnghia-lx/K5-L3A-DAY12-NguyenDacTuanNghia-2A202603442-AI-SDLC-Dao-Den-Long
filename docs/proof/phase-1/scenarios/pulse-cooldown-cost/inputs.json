@@ -1,0 +1,36 @@
+{
+  "frames": [
+    {
+      "tick": 0,
+      "pulse": true
+    },
+    {
+      "tick": 1,
+      "pulse": false
+    },
+    {
+      "tick": 30,
+      "pulse": true
+    },
+    {
+      "tick": 31,
+      "pulse": false
+    },
+    {
+      "tick": 60,
+      "pulse": true
+    },
+    {
+      "tick": 61,
+      "pulse": false
+    },
+    {
+      "tick": 150,
+      "pulse": true
+    },
+    {
+      "tick": 151,
+      "pulse": false
+    }
+  ]
+}
