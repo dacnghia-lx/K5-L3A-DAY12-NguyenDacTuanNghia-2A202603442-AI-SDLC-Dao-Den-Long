@@ -2,22 +2,32 @@
 // menus, pause, settings, HUD and sound. All gameplay rules live in ../sim/ — this file
 // only draws, reads input and plays sounds.
 import * as THREE from 'three';
-import { Sim } from '../sim/sim.js';
+import { Sim, benchScenario, DEFAULT_INPUT } from '../sim/sim.js';
 import { TUNING, WORLD } from '../sim/tuning.js';
 import { LEVELS } from '../sim/levels.js';
+import { isValidName, normalizeName, addEntry } from '../leaderboard.js';
 import { Sfx } from './audio.js';
-import { PAL, buildWorld, makeSea, makePlayer, makeLantern, makeMote, makeShade, makeDrifter, makeCharm, makeOwl, makeLeaves } from './world.js';
+import { PAL, buildWorld, makeSea, makePlayer, makeLantern, makeDrifter, makeCharm, makeOwl, makeLeaves, ShadeSwarm, MoteField } from './world.js';
 
 const $ = (id) => document.getElementById(id);
 const TICK = 1 / WORLD.tick_rate;
 const sfx = new Sfx();
+const QUERY = new URLSearchParams(location.search);
+const BENCH = QUERY.get('bench') === '1';
 
 // ---------- settings (saved between sessions) ----------
 const SETTINGS_KEY = 'ddl-settings-v1';
-const settings = { volume: 0.8, sens: 1, muted: false, colorblind: false };
+const DEFAULT_KEYS = {
+  up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
+  jump: ['Space'], dash: ['ShiftLeft', 'ShiftRight'], interact: ['KeyE'], pulse: ['KeyF'], pause: ['Escape', 'KeyP'],
+};
+const ACTION_NAMES = { up: 'Đi tới', down: 'Đi lùi', left: 'Sang trái', right: 'Sang phải', jump: 'Nhảy', dash: 'Lướt', interact: 'Nạp / châm dầu', pulse: 'Tỏa Sáng', pause: 'Tạm dừng' };
+const settings = { volume: 0.8, sens: 1, muted: false, colorblind: false, reducedMotion: false, bigText: false, keys: structuredClone(DEFAULT_KEYS) };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'));
+  for (const a of Object.keys(DEFAULT_KEYS)) if (!Array.isArray(settings.keys?.[a])) settings.keys = { ...structuredClone(DEFAULT_KEYS), ...settings.keys, [a]: [...DEFAULT_KEYS[a]] };
 } catch { /* storage unavailable: defaults */ }
+if (BENCH) Object.assign(settings, { colorblind: false, reducedMotion: false, bigText: false });
 function saveSettings() {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -40,6 +50,9 @@ const moon = new THREE.DirectionalLight(0x9aa6ff, 0.9);
 moon.position.set(-30, 60, 20);
 scene.add(moon);
 scene.add(makeSea());
+const swarm = new ShadeSwarm(256);
+const moteField = new MoteField(192);
+scene.add(swarm.group, moteField.group);
 
 function resize() {
   const w = window.innerWidth;
@@ -75,6 +88,10 @@ let overlayBack = null; // where "Back" from settings returns
 
 const totalScore = () => Object.values(wonScores).reduce((a, b) => a + b, 0);
 
+const knownWeak = new Set(); // lanterns already announced as "low fuel"
+const shadeArrows = []; // { id, until } — edge arrows towards freshly spawned shades
+let shake = 0; // camera shake (seconds left), disabled by reduced motion
+
 function clearEntities() {
   for (const map of [view.lanterns, view.motes, view.shades, view.drifters, view.charms]) {
     for (const m of map.values()) scene.remove(m);
@@ -84,9 +101,11 @@ function clearEntities() {
   view.rings = [];
 }
 
-function startNight(n, seed = baseSeed + n - 1) {
+function startNight(n, seed = baseSeed + n - 1, { scenario = null, bench = false } = {}) {
   night = n;
-  sim = new Sim({ seed, night: n });
+  sim = new Sim({ seed, night: n, scenario, bench });
+  knownWeak.clear();
+  shadeArrows.length = 0;
   clearEntities();
   if (worldGroup) scene.remove(worldGroup);
   worldGroup = buildWorld(LEVELS[n]);
@@ -167,14 +186,82 @@ function hideCard() {
   $('overlay').hidden = true;
 }
 
-const CONTROLS = `<table class="keys">
-  <tr><td>W A S D / ↑ ← ↓ →</td><td>Di chuyển</td></tr>
+const keyLabel = (code) => code.replace(/^Key/, '').replace(/^Digit/, '').replace('Arrow', '').replace('Left', ' trái').replace('Right', ' phải').replace('Up', '↑').replace('Down', '↓').replace('Space', 'Space').replace('Escape', 'Esc');
+const keysOf = (a) => settings.keys[a].map(keyLabel).join(' / ');
+const controlsTable = () => `<table class="keys">
+  <tr><td>${keysOf('up')}, ${keysOf('left')}, ${keysOf('down')}, ${keysOf('right')}</td><td>Di chuyển</td></tr>
   <tr><td>Kéo chuột / J L</td><td>Xoay camera</td></tr>
-  <tr><td>Space</td><td>Nhảy</td></tr>
-  <tr><td>Shift</td><td>Lướt</td></tr>
-  <tr><td>E</td><td>Nạp ánh sáng vào đèn</td></tr>
-  <tr><td>F / Chuột phải</td><td>Tỏa Sáng (tốn 3 đom đóm)</td></tr>
-  <tr><td>Esc / P</td><td>Tạm dừng</td></tr></table>`;
+  <tr><td>${keysOf('jump')}</td><td>Nhảy</td></tr>
+  <tr><td>${keysOf('dash')}</td><td>Lướt</td></tr>
+  <tr><td>${keysOf('interact')}</td><td>Nạp ánh sáng / châm dầu</td></tr>
+  <tr><td>${keysOf('pulse')} / Chuột phải</td><td>Tỏa Sáng (tốn 3 đom đóm)</td></tr>
+  <tr><td>${keysOf('pause')}</td><td>Tạm dừng</td></tr></table>`;
+
+// ---------- leaderboard (Ticket-04 §3): saved on local disk by the server, browser storage as fallback ----------
+const LB_LOCAL = 'ddl-leaderboard-v1';
+async function loadBoard() {
+  try {
+    const r = await fetch('/api/leaderboard');
+    if (r.ok) return (await r.json()).entries;
+  } catch { /* offline / static hosting */ }
+  try {
+    return JSON.parse(localStorage.getItem(LB_LOCAL) || '[]');
+  } catch {
+    return [];
+  }
+}
+async function saveBoardEntry(entry) {
+  try {
+    const r = await fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
+    if (r.ok) return await r.json();
+  } catch { /* fall back below */ }
+  const res = addEntry(await loadBoard(), entry);
+  try {
+    localStorage.setItem(LB_LOCAL, JSON.stringify(res.entries));
+  } catch { /* ignore */ }
+  return res;
+}
+
+async function showLeaderboard(highlight = null, back = showMenu) {
+  const entries = await loadBoard();
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const rows = entries.length
+    ? entries.map((e, i) => `<tr class="${highlight === i + 1 ? 'me' : ''}"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${e.score}</td><td>${e.nights_won}/3</td><td>${esc(e.achieved_at.slice(0, 16).replace('T', ' '))}</td></tr>`).join('')
+    : '<tr><td colspan="5">Chưa có ai — hãy là người đầu tiên!</td></tr>';
+  showCard({
+    title: 'Bảng xếp hạng',
+    sub: 'Top 10 — tổng điểm các Đêm đã thắng',
+    body: `<table class="board"><tr><th>#</th><th>Tên</th><th>Điểm</th><th>Đêm thắng</th><th>Lúc</th></tr>${rows}</table>`,
+    buttons: [['Quay lại', () => back()]],
+  });
+}
+
+function promptSave(after) {
+  const nightsWon = Object.keys(wonScores).length;
+  showCard({
+    title: 'Lưu điểm',
+    sub: `Tổng điểm ${totalScore()} · thắng ${nightsWon}/3 Đêm · seed ${baseSeed}`,
+    body: `<div class="settings"><label for="lb-name">Tên của bạn (3–12 chữ, số hoặc _; có dấu được)</label>
+      <input id="lb-name" maxlength="12" autocomplete="off" value="${esc0(settings.lastName || '')}">
+      <p id="lb-err" class="err" role="alert"></p></div>`,
+    buttons: [
+      ['Lưu', async () => {
+        const name = normalizeName($('lb-name').value);
+        if (!isValidName(name)) {
+          $('lb-err').textContent = '⚠ Tên phải dài 3–12 ký tự, chỉ gồm chữ, số hoặc dấu _';
+          return;
+        }
+        settings.lastName = name;
+        saveSettings();
+        const r = await saveBoardEntry({ name, score: totalScore(), nights_won: nightsWon, seed: baseSeed });
+        showLeaderboard(r.rank, after);
+      }],
+      ['Bỏ qua', () => after(), 'ghost'],
+    ],
+  });
+  setTimeout(() => $('lb-name')?.focus(), 0);
+}
+const esc0 = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 function showMenu() {
   mode = 'menu';
@@ -184,11 +271,12 @@ function showMenu() {
   showCard({
     title: 'Đảo Đèn Lồng',
     sub: 'Ba Đêm — ba hòn đảo',
-    body: `<p>Sương đen đã nuốt ánh sáng của quần đảo. Hãy giúp <b>Mây</b> gom đom đóm, thắp lại các <b>Đèn Lồng Lớn</b> và xua <b style="color:#b48cff">Bóng Mực</b> trước bình minh.</p>${CONTROLS}`,
+    body: `<p>Sương đen đã nuốt ánh sáng của quần đảo. Hãy giúp <b>Mây</b> gom đom đóm, thắp lại các <b>Đèn Lồng Lớn</b>, giữ chúng cháy tới bình minh và xua <b style="color:#b48cff">Bóng Mực</b>.</p>${controlsTable()}`,
     buttons: [
       ['Chơi từ Đêm 1', () => newCampaign()],
       ['Đêm 2', () => { newCampaign(); startNight(2); }, 'ghost'],
       ['Đêm 3', () => { newCampaign(); startNight(3); }, 'ghost'],
+      ['Bảng xếp hạng', () => showLeaderboard(null, showMenu), 'ghost'],
       ['Cài đặt', () => showSettings(), 'ghost'],
     ],
   });
@@ -205,7 +293,7 @@ function showPause() {
   showCard({
     title: 'Tạm dừng',
     sub: `Đêm ${night} — ${LEVELS[night].name}`,
-    body: CONTROLS,
+    body: controlsTable(),
     buttons: [
       ['Tiếp tục', () => resume()],
       ['Chơi lại Đêm', () => startNight(night), 'ghost'],
@@ -221,8 +309,10 @@ function resume() {
   acc = 0;
 }
 
-function showSettings() {
+let rebinding = null; // action waiting for a key press
+function showSettings(msg = '') {
   const back = overlayBack || showMenu;
+  const keyRows = Object.keys(DEFAULT_KEYS).map((a) => `<tr><td>${ACTION_NAMES[a]}</td><td><b>${keysOf(a)}</b></td><td><button class="ghost small-btn" data-rebind="${a}">${rebinding === a ? 'Nhấn phím…' : 'Đổi'}</button></td></tr>`).join('');
   showCard({
     title: 'Cài đặt',
     body: `<div class="settings">
@@ -230,20 +320,46 @@ function showSettings() {
       <label>Độ nhạy chuột <input id="set-sens" type="range" min="0.2" max="3" step="0.1" value="${settings.sens}"></label>
       <label>Tắt tiếng <input id="set-mute" type="checkbox" ${settings.muted ? 'checked' : ''}></label>
       <label>Bảng màu dễ phân biệt <input id="set-cb" type="checkbox" ${settings.colorblind ? 'checked' : ''}></label>
+      <label>Giảm chuyển động (tắt rung camera, chớp màn hình) <input id="set-rm" type="checkbox" ${settings.reducedMotion ? 'checked' : ''}></label>
+      <label>Chữ lớn (×1.25) <input id="set-big" type="checkbox" ${settings.bigText ? 'checked' : ''}></label>
+      <h3>Phím</h3>
+      <p id="key-msg" class="err" role="alert">${msg}</p>
+      <table class="keys rebind">${keyRows}</table>
     </div>`,
-    buttons: [['Xong', () => back()]],
+    buttons: [['Xong', () => { rebinding = null; back(); }], ['Khôi phục phím mặc định', () => { settings.keys = structuredClone(DEFAULT_KEYS); saveSettings(); rebinding = null; showSettings('Đã khôi phục phím mặc định.'); }, 'ghost']],
   });
   $('set-vol').addEventListener('input', (e) => { settings.volume = Number(e.target.value); sfx.setVolume(settings.volume); saveSettings(); sfx.pickup(3); });
   $('set-sens').addEventListener('input', (e) => { settings.sens = Number(e.target.value); saveSettings(); });
   $('set-mute').addEventListener('change', (e) => { settings.muted = e.target.checked; sfx.setMuted(settings.muted); saveSettings(); });
-  $('set-cb').addEventListener('change', (e) => { settings.colorblind = e.target.checked; applyColorblind(); saveSettings(); });
+  $('set-cb').addEventListener('change', (e) => { settings.colorblind = e.target.checked; applyA11y(); saveSettings(); });
+  $('set-rm').addEventListener('change', (e) => { settings.reducedMotion = e.target.checked; saveSettings(); });
+  $('set-big').addEventListener('change', (e) => { settings.bigText = e.target.checked; applyA11y(); saveSettings(); });
+  for (const b of document.querySelectorAll('[data-rebind]')) {
+    b.addEventListener('click', () => {
+      rebinding = b.dataset.rebind;
+      showSettings(`Nhấn phím mới cho "${ACTION_NAMES[rebinding]}" (Esc để hủy).`);
+    });
+  }
 }
 
-// Ticket-03 §6: colour-blind friendly palette (saved): shade rim/eyes #00B3FF, UI warning white + ⚠.
-function applyColorblind() {
-  document.body.classList.toggle('cb', Boolean(settings.colorblind));
+/** Rebinding: the new key replaces the action's main key; a key already used elsewhere is refused. */
+function captureRebind(code) {
+  const action = rebinding;
+  rebinding = null;
+  if (code === 'Escape') return showSettings('Đã hủy đổi phím.');
+  const owner = Object.keys(settings.keys).find((a) => a !== action && settings.keys[a].includes(code));
+  if (owner) return showSettings(`⚠ Phím ${keyLabel(code)} đang dùng cho "${ACTION_NAMES[owner]}". Chọn phím khác.`);
+  settings.keys[action] = [code, ...settings.keys[action].slice(1).filter((c) => c !== code)];
+  saveSettings();
+  return showSettings(`"${ACTION_NAMES[action]}" = ${keysOf(action)}`);
 }
-applyColorblind();
+
+// Ticket-03 §6 colour-blind palette; Ticket-04 §4 large text (UI ≥ 18 px, ×1.25 option).
+function applyA11y() {
+  document.body.classList.toggle('cb', Boolean(settings.colorblind));
+  document.documentElement.style.setProperty('--font-scale', settings.bigText ? '1.25' : '1');
+}
+applyA11y();
 
 function showResult({ result, reason }) {
   mode = 'result';
@@ -273,7 +389,7 @@ function showResult({ result, reason }) {
     <tr><td>Tổng điểm các Đêm đã thắng</td><td></td><td>${totalScore()}</td></tr></table>`;
   const buttons = won
     ? night < 3 ? [[`Đêm ${night + 1}`, () => startNight(night + 1)], ['Về menu', () => showMenu(), 'ghost']] : [['Đón bình minh', () => showDawn()]]
-    : [[`Chơi lại Đêm ${night}`, () => startNight(night)], ['Về menu', () => showMenu(), 'ghost']];
+    : [[`Chơi lại Đêm ${night}`, () => startNight(night)], ['Lưu điểm', () => promptSave(showMenu), 'ghost'], ['Về menu', () => showMenu(), 'ghost']];
   setTimeout(() => {
     showCard({ title: won ? `Thắng Đêm ${night}!` : 'Thua rồi…', sub: reasons[reason] || reason, body: table, buttons });
   }, 900);
@@ -289,21 +405,27 @@ function showDawn() {
     body: `<p>Mặt trời ló dạng trên biển mây. Ông Đăng mỉm cười: “Giỏi lắm, Mây!”</p>
       <table class="breakdown">${[1, 2, 3].map((n) => `<tr><td>Đêm ${n} — ${LEVELS[n].name}</td><td>${wonScores[n] ?? '—'}</td></tr>`).join('')}
       <tr><td><b>Tổng điểm</b></td><td><b>${totalScore()}</b></td></tr></table>`,
-    buttons: [['Chơi lại từ đầu', () => newCampaign()], ['Về menu', () => showMenu(), 'ghost']],
+    buttons: [['Lưu điểm', () => promptSave(showMenu)], ['Chơi lại từ đầu', () => newCampaign(), 'ghost'], ['Về menu', () => showMenu(), 'ghost']],
   });
 }
 
 // ---------- input ----------
-const BINDINGS = {
-  up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-  jump: ['Space'], dash: ['ShiftLeft', 'ShiftRight'], interact: ['KeyE'], pulse: ['KeyF'], pause: ['Escape', 'KeyP'],
-};
+// Key bindings come from settings.keys (rebindable, saved; Ticket-04 §4).
 const keys = new Set();
 const latch = { jump: false, interact: false, pulse: false, dash: false };
 let mousePulse = false;
-const actionOf = (code) => Object.keys(BINDINGS).find((a) => BINDINGS[a].includes(code));
+const actionOf = (code) => Object.keys(settings.keys).find((a) => settings.keys[a].includes(code));
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
+  if (rebinding) {
+    e.preventDefault();
+    captureRebind(e.code);
+    return;
+  }
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') {
+    if (e.code === 'Enter') document.querySelector('#ov-btns button')?.click();
+    return;
+  }
   keys.add(e.code);
   const a = actionOf(e.code);
   if (a in latch) latch[a] = true;
@@ -343,7 +465,7 @@ window.addEventListener('mousemove', (e) => {
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-const held = (action) => BINDINGS[action].some((c) => keys.has(c));
+const held = (action) => settings.keys[action].some((c) => keys.has(c));
 function readInput() {
   const fwd = (held('up') ? 1 : 0) - (held('down') ? 1 : 0);
   // camera looks along +forward; screen-right is world (-cos, +sin) => "right" maps to move x = -1
@@ -368,7 +490,18 @@ function toast(msg, secs = 2) {
   $('toast').hidden = false;
   toastTimer = secs;
 }
+// Subtitles / visual cues (Ticket-04 §4): stacked lines that fade out.
+function subtitle(msg, secs = 3) {
+  const box = $('subs');
+  const el = document.createElement('div');
+  el.textContent = msg;
+  box.appendChild(el);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => el.remove(), secs * 1000);
+}
 function flash() {
+  if (settings.reducedMotion) return; // no screen flash with reduced motion
+  shake = 0.3;
   const f = $('hitflash');
   f.style.transition = 'none';
   f.style.opacity = 1;
@@ -400,7 +533,11 @@ function handleEvent(e) {
       if (e.data.by === 'fall') toast(`Mây rơi xuống biển mây! Mất ${e.data.lost} đom đóm`, 2);
       else if (e.data.dropped) toast(`Bị Bóng Mực chạm! Rơi ${e.data.dropped} đom đóm`, 1.5);
       break;
-    case 'shade_spawned': sfx.spawn(); toast('Bóng Mực trồi lên từ sương…', 1.6); break;
+    case 'shade_spawned':
+      sfx.spawn();
+      subtitle(`👁 Bóng Mực ${e.data.id} xuất hiện — xem mũi tên tím ở mép màn hình`, 3);
+      shadeArrows.push({ id: e.data.id, until: clock + 3 });
+      break;
     case 'dash': sfx.dash(); break;
     case 'charm_picked': sfx.charm(); toast('Bùa Gió! Chạy nhanh, lướt không hồi chiêu', 2); break;
     case 'drifter_steal': sfx.steal(); toast(`Gió Lạc cướp ${e.data.amount} đom đóm!`, 1.8); break;
@@ -480,29 +617,33 @@ function syncEntities(time) {
     u.fuelBar.children.forEach((c) => { c.material.opacity = dim; });
   }
 
-  syncMap(view.motes, sim.motes, (mo) => makeMote(mo.kind === 'dropped'), (m, mo) => {
-    const blink = mo.ttl !== null && mo.ttl < 120 && Math.floor(time * 8) % 2 === 0;
-    m.visible = !blink;
-    m.position.set(mo.pos[0] + Math.sin(time * 1.3 + m.userData.phase) * 0.15, mo.pos[1] + 0.8 + Math.sin(time * 2 + m.userData.phase) * 0.25, mo.pos[2]);
-  });
+  // Fireflies (instanced). Dropped ones blink in their last 2 s.
+  const pts = [];
+  for (let i = 0; i < sim.motes.length; i++) {
+    const mo = sim.motes[i];
+    if (mo.ttl !== null && mo.ttl < 120 && Math.floor(time * 8) % 2 === 0) continue;
+    const ph = (i * 2.399) % (Math.PI * 2);
+    pts.push([mo.pos[0] + Math.sin(time * 1.3 + ph) * 0.15, mo.pos[1] + 0.8 + Math.sin(time * 2 + ph) * 0.25, mo.pos[2]]);
+  }
+  moteField.update(pts);
 
-  syncMap(view.shades, sim.shades, () => makeShade(), (m, s) => {
-    const u = m.userData;
+  // Ink Shades (instanced): face Mây (or the lantern they drain), rise out of the mist when spawning.
+  const rimColor = settings.colorblind ? 0x00b3ff : PAL.shadeRim;
+  const list = sim.shades.map((s, i) => {
     const rise = s.state === 'spawning' ? 1 - s.ticks / WORLD.shade_spawning_ticks : 1;
-    m.position.set(s.pos[0], s.pos[1] - (1 - rise) * 2 + Math.sin(time * 2 + u.phase) * 0.15, s.pos[2]);
     const drainLantern = s.state === 'drain' ? sim.lanterns.find((l) => l.id === s.target) : null;
-    if (drainLantern) m.lookAt(drainLantern.pos[0], m.position.y, drainLantern.pos[2]);
-    else m.lookAt(p.pos[0], m.position.y, p.pos[2]);
+    const look = drainLantern ? drainLantern.pos : p.pos;
     const stunned = s.state === 'stunned';
-    const rimColor = settings.colorblind ? 0x00b3ff : PAL.shadeRim;
-    u.bodyMat.color.setHex(stunned ? PAL.shadeStun : PAL.shadeBody);
-    u.bodyMat.emissive.setHex(rimColor);
-    u.bodyMat.opacity = stunned ? 0.6 : 0.95 * rise;
-    u.rim.material.color.setHex(rimColor);
-    u.rim.material.opacity = stunned ? 0.2 : (drainLantern ? 0.55 + Math.sin(time * 10) * 0.3 : 0.55) * rise;
-    u.eyeMat.color.setHex(stunned ? PAL.gold : rimColor);
-    m.rotation.z = stunned ? Math.sin(time * 20) * 0.2 : 0;
+    return {
+      pos: [s.pos[0], s.pos[1] + Math.sin(time * 2 + i) * 0.15, s.pos[2]],
+      yaw: Math.atan2(look[0] - s.pos[0], look[2] - s.pos[2]),
+      roll: stunned ? Math.sin(time * 20) * 0.2 : 0,
+      sink: (1 - rise) * 2,
+      scale: drainLantern ? 1 + Math.sin(time * 10) * 0.06 : 1,
+      stunned,
+    };
   });
+  swarm.update(list, rimColor);
 
   syncMap(view.drifters, sim.drifters, () => makeDrifter(), (m, d) => {
     const u = m.userData;
@@ -572,7 +713,20 @@ function updateCamera(dt) {
   if (camPos.x > 1e8) camPos.copy(goal);
   camPos.lerp(goal, Math.min(1, dt * 8));
   camera.position.copy(camPos);
+  if (shake > 0 && !settings.reducedMotion) {
+    shake = Math.max(0, shake - dt);
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake;
+  }
   camera.lookAt(p.pos[0], py + 1.3, p.pos[2]);
+}
+
+// Ticket-04 §1 benchmark camera: circle r=30 at Y=15 around (0,0,0), start at angle 0 = (30,15,0),
+// counter-clockwise seen from above (same angle convention as the maps: +X towards +Z), 15 s per lap.
+function benchCamera(t) {
+  const a = (2 * Math.PI * t) / 15;
+  camera.position.set(30 * Math.cos(a), 15, 30 * Math.sin(a));
+  camera.lookAt(0, 0, 0);
 }
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -593,6 +747,8 @@ function updateHud() {
     el.querySelector('i').style.height = `${usable ? (1 - left / total) * 100 : 0}%`;
     el.classList.toggle('wait', left > 0 || !usable);
   };
+  $('cd-dash').querySelector('.key').textContent = keyLabel(settings.keys.dash[0]);
+  $('cd-pulse').querySelector('.key').textContent = keyLabel(settings.keys.pulse[0]);
   cd('cd-dash', p.charm > 0 ? 0 : p.dashCd, Math.round(TUNING.dash_cooldown_s * 60), true);
   cd('cd-pulse', p.pulseCd, Math.round(TUNING.pulse_cooldown_s * 60), p.carried >= TUNING.pulse_cost);
   $('charm').hidden = p.charm <= 0;
@@ -635,20 +791,62 @@ function updateHud() {
     arrow.hidden = true;
   }
 
-  // Last 10 s countdown beeps; wind warning.
+  // Last 10 s: beep + visual countdown; wind warning (sound + text + leaves).
   const sec = Math.ceil(tl);
   if (mode === 'playing' && sec <= 10 && sec > 0 && sec !== lastCountdown) {
     lastCountdown = sec;
     sfx.tick();
+    if (sec === 10) subtitle('⚠ 10 giây cuối trước bình minh!', 3);
   }
+  $('countdown').hidden = !(mode === 'playing' && sec <= 10 && sec > 0);
+  $('countdown').textContent = sec;
   const warn = sim.windWarning();
   const warning = mode === 'playing' && !sim.wind.active && warn <= WORLD.wind_warn_ticks;
   $('windwarn').hidden = !warning;
   if (warning && !windWarned) {
     windWarned = true;
     sfx.wind();
+    subtitle('🍃 Gió mạnh sắp thổi (2 giây)!', 2.5);
   }
   if (!warning) windWarned = false;
+
+  // Lantern below 30 fuel: announce once each time it becomes weak.
+  if (mode === 'playing') {
+    for (const l of sim.lanterns) {
+      const weak = l.lit && l.fuel < TUNING.low_fuel_threshold * 60;
+      if (weak && !knownWeak.has(l.id)) {
+        knownWeak.add(l.id);
+        subtitle(`⚠ Đèn ${l.id} sắp cạn dầu — châm thêm đom đóm!`, 3);
+      } else if (!weak) knownWeak.delete(l.id);
+    }
+  }
+
+  // Edge arrows towards freshly spawned shades.
+  const sa = $('shadearrow');
+  const live = shadeArrows.filter((x) => x.until > clock && sim.shades.some((s) => s.id === x.id));
+  shadeArrows.splice(0, shadeArrows.length, ...live);
+  const s0 = live.length ? sim.shades.find((s) => s.id === live[live.length - 1].id) : null;
+  sa.hidden = !s0 || mode !== 'playing';
+  if (s0) placeEdgeArrow(sa, s0.pos, true);
+}
+
+/** Puts an arrow at the screen edge pointing at a world position (always shown when `always`). */
+function placeEdgeArrow(el, pos, always = false) {
+  tmpV.set(pos[0], pos[1] + 1, pos[2]).project(camera);
+  const behind = tmpV.z > 1;
+  const off = behind || Math.abs(tmpV.x) > 0.95 || Math.abs(tmpV.y) > 0.95;
+  if (!off && !always) {
+    el.hidden = true;
+    return;
+  }
+  let x = tmpV.x;
+  let y = tmpV.y;
+  if (behind) { x = -x; y = -y; }
+  const a = Math.atan2(y, x);
+  const k = (off ? 0.88 : 0.5) / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+  el.style.left = `${(Math.cos(a) * k * 0.5 + 0.5) * window.innerWidth - 17}px`;
+  el.style.top = `${(-Math.sin(a) * k * 0.5 + 0.5) * window.innerHeight - 17}px`;
+  el.style.transform = `rotate(${-a}rad)`;
 }
 
 function updateLeaves(time) {
@@ -677,12 +875,69 @@ function stepOnce(input) {
   if (wasGrounded && !sim.player.grounded && sim.player.vel[1] > 0 && input.jump) sfx.jump();
   wasGrounded = sim.player.grounded;
 }
+// Benchmark state (?bench=1&seed=42&duration=30): 3 s warm-up, then `duration` s of frame times.
+const bench = BENCH ? { seed: Number(QUERY.get('seed') || 42), duration: Number(QUERY.get('duration') || 30), warmup: 3, t0: null, dts: [], firstFrameEpoch: null, done: false } : null;
+function benchFrame(now, dtMs) {
+  if (bench.t0 === null) {
+    bench.t0 = now;
+    bench.firstFrameEpoch = performance.timeOrigin + now;
+  }
+  const t = (now - bench.t0) / 1000;
+  if (t >= bench.warmup && !bench.done) {
+    bench.dts.push(dtMs);
+    const heap = performance.memory?.usedJSHeapSize; // Chromium only; informational (not RSS)
+    if (heap) bench.heapPeak = Math.max(bench.heapPeak || 0, heap);
+  }
+  if (t >= bench.warmup + bench.duration && !bench.done) {
+    bench.done = true;
+    const d = bench.dts;
+    const N = d.length;
+    const sum = d.reduce((a, b) => a + b, 0);
+    const sorted = [...d].sort((a, b) => a - b);
+    const k = Math.max(1, Math.ceil(0.01 * N));
+    const worst = sorted.slice(-k);
+    const p95 = sorted[Math.min(N - 1, Math.ceil(0.95 * N) - 1)];
+    const gl = renderer.getContext();
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    window.__benchResult = {
+      frames: N,
+      avg_fps: (1000 * N) / sum,
+      p1_low_fps: 1000 / (worst.reduce((a, b) => a + b, 0) / k),
+      frame_ms_p95: p95,
+      first_frame_epoch_ms: bench.firstFrameEpoch,
+      gpu: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      webgl: gl.getParameter(gl.VERSION),
+      canvas: [renderer.domElement.width, renderer.domElement.height],
+      draw_calls: renderer.info.render.calls,
+      js_heap_peak_mb: bench.heapPeak ? Math.round(bench.heapPeak / 2 ** 20) : null,
+    };
+  }
+  return t;
+}
+
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const dtMs = now - last;
+  const dt = Math.min(0.1, dtMs / 1000);
   last = now;
   clock += dt;
   if (keys.has('KeyJ')) camYaw += 120 * dt * settings.sens;
   if (keys.has('KeyL')) camYaw -= 120 * dt * settings.sens;
+  if (bench) {
+    const t = benchFrame(now, dtMs);
+    acc += dt;
+    let n = 0;
+    while (acc >= TICK && n < 6) {
+      sim.step(DEFAULT_INPUT); // no player input in the bench scene
+      acc -= TICK;
+      n++;
+    }
+    syncEntities(clock);
+    updateHud();
+    benchCamera(t);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+    return;
+  }
   if (sim && mode === 'playing') {
     acc += dt;
     let n = 0;
@@ -716,9 +971,19 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// Boot: Night 1 island behind the main menu.
-startNight(1, 1);
-showMenu();
+// Boot: Night 1 island behind the main menu — or the standard benchmark scene.
+if (bench) {
+  startNight(1, bench.seed, { scenario: benchScenario(bench.seed), bench: true });
+  hideCard();
+  mode = 'bench';
+  $('hud').hidden = false;
+  view.owl.visible = false; // creative extras are off in the benchmark scene (Ticket-04 §1)
+  window.__benchReady = true;
+} else {
+  startNight(1, 1);
+  showMenu();
+}
+last = performance.now();
 requestAnimationFrame(frame);
 
 // Dev helpers (inspection + evidence screenshots; see scripts/serve.js).

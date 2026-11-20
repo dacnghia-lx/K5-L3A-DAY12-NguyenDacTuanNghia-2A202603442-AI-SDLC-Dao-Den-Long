@@ -285,6 +285,111 @@ export function makeShade() {
   return g;
 }
 
+// ---------- instanced crowds (Ticket-04: 200 shades + 100 fireflies in a few draw calls) ----------
+const tmpM = new THREE.Matrix4();
+const tmpM2 = new THREE.Matrix4();
+const tmpQ = new THREE.Quaternion();
+const tmpE = new THREE.Euler();
+const tmpP = new THREE.Vector3();
+const tmpS = new THREE.Vector3();
+const tmpC = new THREE.Color();
+const partMatrix = (pos, rot, scale) => new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(...scale));
+const SHADE_PARTS = {
+  body: partMatrix([0, 0, 0], [0, 0, 0], [1, 1.15, 1]),
+  tail: partMatrix([0, -0.9, 0], [Math.PI, 0, 0], [1, 1, 1]),
+  rim: partMatrix([0, 0, 0], [0, 0, 0], [1.08, 1.24, 1.08]),
+  eyeL: partMatrix([-0.25, 0.2, 0.65], [0, 0, 0], [1, 1, 1]),
+  eyeR: partMatrix([0.25, 0.2, 0.65], [0, 0, 0], [1, 1, 1]),
+};
+
+/** All Ink Shades as 4 instanced meshes. update() takes a list of {pos, yaw, roll, sink, stunned}. */
+export class ShadeSwarm {
+  constructor(max = 256) {
+    this.max = max;
+    this.bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: PAL.shadeRim, emissiveIntensity: 0.35, roughness: 0.4, transparent: true, opacity: 0.95 });
+    this.rimMat = new THREE.MeshBasicMaterial({ color: PAL.shadeRim, side: THREE.BackSide, transparent: true, opacity: 0.55 });
+    this.eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    this.body = new THREE.InstancedMesh(shadeGeo, this.bodyMat, max);
+    this.tail = new THREE.InstancedMesh(tailGeo, this.bodyMat, max);
+    this.rim = new THREE.InstancedMesh(shadeGeo, this.rimMat, max);
+    this.eyes = new THREE.InstancedMesh(eyeGeo, this.eyeMat, max * 2);
+    this.group = new THREE.Group();
+    for (const m of [this.body, this.tail, this.rim, this.eyes]) {
+      m.count = 0;
+      m.frustumCulled = false;
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.group.add(m);
+    }
+    for (let i = 0; i < max; i++) this.body.setColorAt(i, tmpC.setHex(PAL.shadeBody));
+    for (let i = 0; i < max * 2; i++) this.eyes.setColorAt(i, tmpC.setHex(PAL.shadeRim));
+  }
+
+  update(list, rimColor) {
+    const n = Math.min(list.length, this.max);
+    this.rimMat.color.setHex(rimColor);
+    this.bodyMat.emissive.setHex(rimColor);
+    for (let i = 0; i < n; i++) {
+      const s = list[i];
+      tmpP.set(s.pos[0], s.pos[1] - s.sink, s.pos[2]);
+      tmpQ.setFromEuler(tmpE.set(0, s.yaw, s.roll));
+      tmpS.setScalar(s.scale ?? 1);
+      tmpM.compose(tmpP, tmpQ, tmpS);
+      // setMatrixAt copies, so one scratch matrix is enough (no per-frame allocations).
+      this.body.setMatrixAt(i, tmpM2.multiplyMatrices(tmpM, SHADE_PARTS.body));
+      this.tail.setMatrixAt(i, tmpM2.multiplyMatrices(tmpM, SHADE_PARTS.tail));
+      this.rim.setMatrixAt(i, tmpM2.multiplyMatrices(tmpM, s.stunned ? SHADE_PARTS.body : SHADE_PARTS.rim));
+      this.eyes.setMatrixAt(2 * i, tmpM2.multiplyMatrices(tmpM, SHADE_PARTS.eyeL));
+      this.eyes.setMatrixAt(2 * i + 1, tmpM2.multiplyMatrices(tmpM, SHADE_PARTS.eyeR));
+      this.body.setColorAt(i, tmpC.setHex(s.stunned ? PAL.shadeStun : PAL.shadeBody));
+      const eye = s.stunned ? PAL.gold : rimColor;
+      this.eyes.setColorAt(2 * i, tmpC.setHex(eye));
+      this.eyes.setColorAt(2 * i + 1, tmpC.setHex(eye));
+    }
+    this.body.count = this.tail.count = this.rim.count = n;
+    this.eyes.count = 2 * n;
+    for (const m of [this.body, this.tail, this.rim, this.eyes]) {
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+  }
+}
+
+/** All fireflies: instanced cores + one Points cloud for the glows. */
+export class MoteField {
+  constructor(max = 160) {
+    this.max = max;
+    this.core = new THREE.InstancedMesh(moteGeo, moteMat, max);
+    this.core.count = 0;
+    this.core.frustumCulled = false;
+    this.core.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.positions = new Float32Array(max * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setDrawRange(0, 0);
+    this.glow = new THREE.Points(geo, new THREE.PointsMaterial({ map: GLOW, color: PAL.moteGlow, size: 0.9, sizeAttenuation: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.glow.frustumCulled = false;
+    this.group = new THREE.Group();
+    this.group.add(this.core, this.glow);
+  }
+
+  /** points: array of [x, y, z] (already animated). */
+  update(points) {
+    const n = Math.min(points.length, this.max);
+    for (let i = 0; i < n; i++) {
+      const [x, y, z] = points[i];
+      tmpM.makeTranslation(x, y, z);
+      this.core.setMatrixAt(i, tmpM);
+      this.positions[3 * i] = x;
+      this.positions[3 * i + 1] = y;
+      this.positions[3 * i + 2] = z;
+    }
+    this.core.count = n;
+    this.core.instanceMatrix.needsUpdate = true;
+    this.glow.geometry.attributes.position.needsUpdate = true;
+    this.glow.geometry.setDrawRange(0, n);
+  }
+}
+
 export function makeDrifter() {
   const g = new THREE.Group();
   const ribbonMat = new THREE.MeshStandardMaterial({ color: PAL.drifter, emissive: PAL.drifter, emissiveIntensity: 0.25, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
