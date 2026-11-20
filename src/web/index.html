@@ -13,40 +13,28 @@
   <canvas id="view"></canvas>
 
   <div id="hud" hidden>
-    <div class="panel left">
-      <div class="row"><span class="lbl">Lửa</span><span id="flames"></span></div>
-      <div class="row"><span class="lbl">Đom đóm</span><span id="carried"></span></div>
-      <div class="row"><span class="lbl">Đèn lồng</span><span id="lit"></span></div>
+    <div class="corner tl"><div id="flames"></div><div class="small" id="nightname"></div></div>
+    <div class="corner tc"><div id="time">5:00</div></div>
+    <div class="corner tr"><div id="lit">0/5</div><div id="score">0</div></div>
+    <div class="corner bc"><div id="carried"></div></div>
+    <div class="corner br">
+      <div class="cd" id="cd-dash"><span class="key">Shift</span><span class="ico">»</span><i></i></div>
+      <div class="cd" id="cd-pulse"><span class="key">F</span><span class="ico">✺</span><i></i></div>
     </div>
-    <div class="panel center">
-      <div id="time">5:00</div>
-      <div id="score">0</div>
-    </div>
-    <div class="panel right">
-      <div class="row"><span class="lbl">Tỏa sáng</span><span id="pulse"></span></div>
-      <div class="row small" id="seed"></div>
-    </div>
+    <div id="charm" hidden>Bùa Gió <b id="charm-s"></b></div>
+    <div id="arrow" hidden>➤</div>
     <div id="prompt" hidden></div>
     <div id="toast" hidden></div>
+    <div id="windwarn" hidden>🍃 Gió sắp thổi!</div>
     <div id="hitflash"></div>
   </div>
 
   <div id="overlay">
-    <div class="card">
+    <div class="card" id="card">
       <h1 id="ov-title">Đảo Đèn Lồng</h1>
-      <p id="ov-sub">Đêm 1 – Đảo Bến</p>
-      <div id="ov-body">
-        <p>Sương đen đã nuốt ánh sáng của đảo. Hãy giúp <b>Mây</b> gom đom đóm và thắp lại <b>5 Đèn Lồng Lớn</b> trước bình minh. Coi chừng <b class="ink">Bóng Mực</b>!</p>
-        <table class="keys">
-          <tr><td>W A S D / ↑ ← ↓ →</td><td>Di chuyển</td></tr>
-          <tr><td>Kéo chuột / J L</td><td>Xoay camera</td></tr>
-          <tr><td>Space</td><td>Nhảy</td></tr>
-          <tr><td>E</td><td>Nạp ánh sáng vào đèn (đứng gần đèn)</td></tr>
-          <tr><td>F / Chuột phải</td><td>Tỏa sáng xua Bóng Mực (tốn 1 đom đóm)</td></tr>
-          <tr><td>R</td><td>Chơi lại · M: tắt/bật âm thanh</td></tr>
-        </table>
-      </div>
-      <button id="ov-btn">Bắt đầu</button>
+      <p id="ov-sub">Ba Đêm — ba hòn đảo</p>
+      <div id="ov-body"></div>
+      <div id="ov-btns"></div>
     </div>
   </div>
 

@@ -2,7 +2,7 @@
 //   npm start            -> http://localhost:8080
 //   PORT=9000 npm start
 // Dev-only: POST /__shot?name=x (PNG data URL body) saves docs/proof/<phase>/screens/x.png
-// so in-game screenshots (key P) become evidence files.
+// so in-game screenshots (window.__shot) become evidence files.
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const PORT = Number(process.env.PORT || 8080);
-const PHASE = process.env.PHASE || 'phase-1';
+const PHASE = process.env.PHASE || 'phase-2';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const ALLOWED = ['src', join('node_modules', 'three', 'build')];
 
