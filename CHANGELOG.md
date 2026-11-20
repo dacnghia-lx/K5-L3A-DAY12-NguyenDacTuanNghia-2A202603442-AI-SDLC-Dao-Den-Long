@@ -28,3 +28,12 @@
 - Ink Shades in `wander` go to the nearest weak lantern and drain it (new state `drain`); refuelling a weak lantern to ≥ 30 pushes them out.
 - Web: fuel bar over each lit lantern, 1 Hz blink under 30, drain visuals, "Bảng màu dễ phân biệt" colour-blind setting (saved), HUD carried/capacity and "lit (needed)", new result breakdown.
 - Design record: `docs/adr/0001-lantern-fuel-and-dawn-win.md`.
+
+## phase-4 / v1.0.0 — Ticket-04 "Bình minh" + Test Contract v1.3
+- **Benchmark** `node scripts/bench.js --seed 42 --duration 30 --out bench.json`: real 1280×720 Chromium window (vsync off), standard scene, circling camera, `bench.json` (avg/1%-low FPS, p95, load).
+- **Soak** `node --expose-gc scripts/soak.js --seed 7 --nights 10 --out soak.json`: 10 nights in one process with seeded random input.
+- **Local leaderboard**: save after Dawn or a loss, top 10 on disk (`data/leaderboard.json`), menu screen, `node scripts/serve.js --export-leaderboard out.json`.
+- **Accessibility**: rebind every action (duplicates refused, restore defaults, saved), subtitles + edge arrows (new shade, wind, last 10 s, low fuel), reduced motion, UI text ≥ 18 px and ×1.25 option.
+- **Performance**: shades and fireflies are instanced (≈ 180 draw calls with 200 shades).
+- **Contract v1.3**: `bench_cmd`, `soak_cmd`; **`run_cmd` is now `node scripts/serve.js`** (so CLI flags reach the script); `build_cmd` also installs Playwright's Chromium.
+- Release build: `node scripts/package.js` → `dist/dao-den-long-v1.0.0.zip` (needs only Node ≥ 18).

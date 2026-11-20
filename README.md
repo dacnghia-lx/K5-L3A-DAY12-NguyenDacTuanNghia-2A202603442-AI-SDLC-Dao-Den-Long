@@ -1,20 +1,28 @@
 # Đảo Đèn Lồng
 
-> **Video demo:** _(có ở Phase 4, Release `v1.0.0`)_ · **Bằng chứng:** [Phase 1](docs/proof/phase-1/README.md) · [Phase 2](docs/proof/phase-2/README.md) · [Phase 3](docs/proof/phase-3/README.md) · Đề lab: [docs/lab](docs/lab/README.md)
+> **Video demo:** _(đính kèm GitHub Release `v1.0.0` — xem mục Phát hành)_ · **Bản chạy được:** Release `v1.0.0` (`dao-den-long-v1.0.0.zip`) · **Bằng chứng:** [Phase 1](docs/proof/phase-1/README.md) · [Phase 2](docs/proof/phase-2/README.md) · [Phase 3](docs/proof/phase-3/README.md) · [Phase 4](docs/proof/phase-4/README.md) · [Retro](docs/notes/retro.md) · Đề lab: [docs/lab](docs/lab/README.md)
 
 Game 3D góc nhìn thứ ba (Day 12 · AI SDLC Lab). Bạn là **Mây**, người giữ đèn nhỏ tuổi đội nón lá treo đèn lồng. Qua **ba Đêm trên ba hòn đảo**, gom đom đóm, nạp ánh sáng để thắp lại các **Đèn Lồng Lớn** trước bình minh, tỏa sáng để xua **Bóng Mực** và giữ đom đóm khỏi **Gió Lạc**.
 
-![Đêm 1](docs/proof/phase-2/screens/p2-01-night1-hud.jpg)
+![Đêm 1](docs/proof/phase-3/screens/p3-01-drain-lowfuel-capacity.jpg)
 
 Tác giả: Nguyễn Đắc Tuấn Nghĩa · 2A202603442 · K5-L3A.
 
-## Cài đặt và chạy (cần Node.js ≥ 18; macOS / Linux / Windows)
+## Yêu cầu hệ thống
+
+- Node.js ≥ 18 (đã thử Node 24) · macOS / Linux / Windows
+- Trình duyệt có WebGL2 (Chrome, Edge, Firefox, Safari mới); GPU tích hợp là đủ (đo: ~180 draw call/khung)
+- Lệnh benchmark cần Chromium của Playwright (`npx playwright install chromium`) hoặc Chrome/Edge đã cài
+
+## Cài đặt và chạy
 
 ```bash
 git clone <repo-url> && cd K5-L3A-DAY12-NguyenDacTuanNghia-2A202603442-AI-SDLC-Dao-Den-Long
 npm install
-npm start          # mở http://localhost:8080
+npm start          # (= node scripts/serve.js) mở http://localhost:8080
 ```
+
+Bản phát hành (không cần `npm install`): tải `dao-den-long-v1.0.0.zip` ở Release `v1.0.0`, giải nén, chạy `node scripts/serve.js`, mở http://localhost:8080.
 
 ## Điều khiển
 
@@ -28,7 +36,9 @@ npm start          # mở http://localhost:8080
 | F / chuột phải | Tỏa Sáng: tốn 3 đom đóm, choáng + đẩy Bóng Mực trong 5 m |
 | Esc / P | Tạm dừng (Tiếp tục · Chơi lại Đêm · Cài đặt · Về menu) · M: tắt/bật âm thanh |
 
-Cài đặt (lưu lại giữa các lần mở game): âm lượng, độ nhạy chuột, tắt tiếng, **bảng màu dễ phân biệt** (cho người mù màu).
+Cài đặt (lưu lại giữa các lần mở game): âm lượng, độ nhạy chuột, tắt tiếng, **bảng màu dễ phân biệt**, **giảm chuyển động**, **chữ lớn ×1.25**, **đổi phím** cho mọi hành động (báo phím trùng, nút khôi phục mặc định). Phụ đề/mũi tên báo Bóng Mực xuất hiện, gió sắp thổi, 10 giây cuối, đèn sắp cạn dầu.
+
+**Bảng xếp hạng:** sau màn Bình Minh hoặc khi thua, nhập tên (3–12 chữ/số/_ — có dấu được) để lưu; top 10 lưu trên đĩa (`data/leaderboard.json`), xem từ menu. Xuất: `node scripts/serve.js --export-leaderboard out.json`.
 
 Thêm `?seed=123` vào URL để chơi lại đúng một màn.
 
@@ -61,7 +71,7 @@ Thắng Đêm 3 để thấy **Bình Minh** với tổng điểm. Thua thì chơ
 
 Tổng điểm game là tổng điểm các Đêm đã thắng.
 
-## Test Contract (headless, v1.2)
+## Test Contract (headless, v1.3)
 
 `game.contract.json` ở gốc repo khai báo lệnh và mọi số tuning (số chuẩn Ticket-02 + Ticket-03). Chạy headless:
 
@@ -71,10 +81,19 @@ node src/headless.js --seed 1 --night 2 [--scenario s.json] [--inputs i.json] --
 
 Exit 0 khi chạy xong; **2** khi file inputs/scenario sai định dạng; 1 cho lỗi khác (ví dụ `--night 4`). Ghi chú triển khai contract: [docs/notes/contract-v1.md](docs/notes/contract-v1.md). Giả định: [Phase 1](docs/notes/phase-1.md#3-giả-định-cho-chỗ-prd-0-còn-mơ-hồ), [Phase 2](docs/notes/phase-2.md#3-giả-định-cho-chỗ-ticket-chưa-nói-rõ).
 
+## Benchmark và soak test (Test Contract v1.3)
+
+```bash
+node scripts/bench.js --seed 42 --duration 30 --out bench.json      # cửa sổ 1280×720, vsync tắt (npm run bench)
+node --expose-gc scripts/soak.js --seed 7 --nights 10 --out soak.json   # 10 Đêm trong 1 tiến trình (npm run soak)
+```
+
+Số đo của tôi (i5-12400F, RTX 2060, Chrome 158): avg **782 FPS**, 1 % low **309 FPS**, load **637 ms**; soak 0 crash, RAM ×1.004 — [docs/proof/phase-4](docs/proof/phase-4/README.md). Bản web không đọc được RSS của trình duyệt nên `peak_mem_mb` là `null`.
+
 ## Kiểm thử
 
 ```bash
-npm test           # contract + CLI + 62 scenario qua CLI thật + tất định + phát lại ván chơi trọn
+npm test           # 96 test: contract + CLI + 62 scenario qua CLI thật + tất định + phát lại ván chơi + bảng xếp hạng/soak/bench
 npm run proof      # sinh lại docs/proof/<phase>/headless-report.md
 node scripts/bot.js --seed 3 --night 1 --out inputs.json   # bot tự chơi, ghi file inputs
 ```
@@ -90,6 +109,10 @@ Tất cả chỉ nằm ở `src/web/` (phần hiển thị), không có trong he
 - **Ông Đăng** — người giữ đèn già giới thiệu từng Đêm.
 - **Âm thanh tự tổng hợp** bằng WebAudio (không dùng file): nhạc nền ngũ cung, tiếng nhặt cao dần, hợp âm thắp đèn, gió, tiếng đếm ngược.
 - **Lá bay** báo trước cơn gió ở Đêm 3; Bóng Mực "trồi lên" từ sương khi sinh ra.
+
+## Phát hành
+
+`node scripts/package.js` tạo `dist/dao-den-long-v1.0.0/` và `.zip` (chỉ cần Node). Release `v1.0.0` trên GitHub đính kèm file zip này và video demo.
 
 ## Cấu trúc
 

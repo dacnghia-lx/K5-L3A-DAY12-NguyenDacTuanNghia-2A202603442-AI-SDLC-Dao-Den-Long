@@ -14,7 +14,8 @@
     "test": "node --test",
     "proof": "node scripts/proof.js phase-4",
     "bench": "node scripts/bench.js --seed 42 --duration 30 --out docs/proof/phase-4/bench.json",
-    "soak": "node --expose-gc scripts/soak.js --seed 7 --nights 10 --out docs/proof/phase-4/soak.json"
+    "soak": "node --expose-gc scripts/soak.js --seed 7 --nights 10 --out docs/proof/phase-4/soak.json",
+    "package": "node scripts/package.js"
   },
   "dependencies": {
     "playwright": "1.65.1",

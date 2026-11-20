@@ -68,3 +68,13 @@ Không phát hiện AI bịa yêu cầu; các chỗ mơ hồ được ghi thành
 | 13 | Thanh dầu quá nhỏ, nền tối lẫn vào trời đêm; ở chế độ mù màu thanh trắng trên nền sáng | Ảnh chụp trình duyệt | Phóng to, đổi nền xám trung tính |
 | 14 | Dựng cảnh ảnh bằng chứng bằng tay với điểm sai (350 thay vì 450) → bảng điểm trong ảnh không cộng khớp | Tự cộng lại các dòng trong ảnh | Dựng lại cảnh; bài học: ảnh bằng chứng cũng phải tự kiểm số |
 | 15 | Script vá test viết bằng `node -e` trong bash lại hỏng escape lần nữa | — | Viết script vá thành file `.mjs` rồi chạy |
+
+## Phase 4
+
+| # | Sai gì | Phát hiện bằng | Sửa / bài học |
+|---|---|---|---|
+| 16 | `benchScenario` trả đom đóm dạng `[x,y,z]` trong khi `Sim` nhận dạng đã chuẩn hóa `{pos}` → crash | Chạy thử | Trả `{pos}`; test `phase4.test.js` dựng đúng cảnh |
+| 17 | Soak trượt ngưỡng bộ nhớ (×1.26) | Đọc số + `v8.getHeapSpaceStatistics` | Heap JS không đổi (không rò rỉ); RSS tăng một lần do JIT. Thêm bước khởi động máy JS trước khi đo, ghi cả RSS lúc lạnh — minh bạch trong `soak.json` và phase-4.md |
+| 18 | Pane trình duyệt ẩn → rAF dừng, không đo được FPS | Kết quả bench không bao giờ xuất hiện | Bench chạy trong cửa sổ Chromium thật qua Playwright |
+
+**Token/chi phí cuối dự án:** ngữ cảnh ~669k token; 88 % hạn mức 5 giờ, 49 % hạn mức tuần của gói Pro (số đo thật). Xem [retro.md](retro.md).
