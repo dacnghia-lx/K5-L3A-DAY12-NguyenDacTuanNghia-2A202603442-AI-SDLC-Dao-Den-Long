@@ -83,7 +83,6 @@ for (const [night, seeds] of [[1, [1, 2, 3, 4, 5]], [2, [1, 2, 3]], [3, [1, 2, 3
   }
 }
 rmSync(runA);
-rmSync(inputs1);
 md.push('');
 
 // 4. Performance
