@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đảo Đèn Lồng</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    { "imports": { "three": "../../node_modules/three/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <div id="hud" hidden>
+    <div class="panel left">
+      <div class="row"><span class="lbl">Lửa</span><span id="flames"></span></div>
+      <div class="row"><span class="lbl">Đom đóm</span><span id="carried"></span></div>
+      <div class="row"><span class="lbl">Đèn lồng</span><span id="lit"></span></div>
+    </div>
+    <div class="panel center">
+      <div id="time">5:00</div>
+      <div id="score">0</div>
+    </div>
+    <div class="panel right">
+      <div class="row"><span class="lbl">Tỏa sáng</span><span id="pulse"></span></div>
+      <div class="row small" id="seed"></div>
+    </div>
+    <div id="prompt" hidden></div>
+    <div id="toast" hidden></div>
+    <div id="hitflash"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="card">
+      <h1 id="ov-title">Đảo Đèn Lồng</h1>
+      <p id="ov-sub">Đêm 1 – Đảo Bến</p>
+      <div id="ov-body">
+        <p>Sương đen đã nuốt ánh sáng của đảo. Hãy giúp <b>Mây</b> gom đom đóm và thắp lại <b>5 Đèn Lồng Lớn</b> trước bình minh. Coi chừng <b class="ink">Bóng Mực</b>!</p>
+        <table class="keys">
+          <tr><td>W A S D / ↑ ← ↓ →</td><td>Di chuyển</td></tr>
+          <tr><td>Kéo chuột / J L</td><td>Xoay camera</td></tr>
+          <tr><td>Space</td><td>Nhảy</td></tr>
+          <tr><td>E</td><td>Nạp ánh sáng vào đèn (đứng gần đèn)</td></tr>
+          <tr><td>F / Chuột phải</td><td>Tỏa sáng xua Bóng Mực (tốn 1 đom đóm)</td></tr>
+          <tr><td>R</td><td>Chơi lại · M: tắt/bật âm thanh</td></tr>
+        </table>
+      </div>
+      <button id="ov-btn">Bắt đầu</button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
