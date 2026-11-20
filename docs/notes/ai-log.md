@@ -39,3 +39,21 @@ Không phát hiện AI bịa yêu cầu; các chỗ mơ hồ được ghi thành
 - Bóng Mực ở ngay vị trí người chơi khi pulse: đẩy theo hướng di chuyển cuối.
 - Bóng Mực trong vùng đèn vừa thắp: bị đẩy ra ngay trong bước đó.
 - Làm tròn 3 chữ số không làm khoảng cách tới đèn < 4 m (đặt ở 4.002 m).
+
+## Phase 2
+
+**Lời nhắc chính:** người dùng hỏi "cần thêm gì để submit", rồi chỉ ra Phase 2–4 đã mở trên lab board. Nội dung ticket chỉ tải sau khi đăng nhập claude.ai, nên agent đọc qua trình duyệt Edge của người dùng (extension Claude), copy văn bản ticket vào `docs/lab/tickets/` để làm nguồn yêu cầu cố định.
+
+**Cách làm:** viết lại sim theo đúng thứ tự tick của ticket → viết 47 scenario với số tính tay **trước khi chạy** → 45/47 đạt ngay lần đầu → làm bản web 3 Đêm → kiểm bằng trình duyệt + ảnh → bằng chứng → tag.
+
+## Các lần AI sai ở Phase 2 và cách phát hiện
+
+| # | Sai gì | Phát hiện bằng | Sửa / bài học |
+|---|---|---|---|
+| 7 | Scenario `night2-bridge` kỳ vọng x = 60 nhưng quên Bùa Gió đặt ngay trên cầu (Mây nhặt bùa → 7.2 m/s → 65.2) | Test đỏ; tính lại tay 34 + 260 × 0.12 = 65.2 khớp đúng output | Lỗi ở **kỳ vọng**, không phải code: scenario thêm `charms: []`. Bài học: scenario phải liệt kê mọi thực thể mặc định của bản đồ |
+| 8 | `night3-wall-blocks` kỳ vọng z < 12, thực tế 11.99999… làm tròn thành 12 | Test đỏ | Sai số cộng dồn 0.1; kỳ vọng đổi thành ≤ 12 |
+| 9 | Hành vi `wander` tự nghĩ ra (đứng canh cách đèn tắt 3 m) khiến game gần như không thắng được: bot thua 18/18 ván | Chạy bot nhiều seed và đọc sự kiện | Đổi thành đi lang thang quanh đèn tắt trong 10 m; bot thắng được Đêm 1. Bài học: chỗ ticket bỏ trống vẫn phải kiểm bằng chơi thử |
+| 10 | Lệnh `node -e` dài viết qua bash bị lỗi escape (`${}` và backtick) | Bash báo lỗi, file không đổi | Dùng công cụ Edit thay cho sửa file bằng shell khi chuỗi có template literal |
+| 11 | `window.__shot` chỉ chụp canvas, không có HUD/menu — ảnh pause/kết quả vô dụng | Xem lại ảnh | Chụp bằng ảnh trình duyệt; ghi vào skill `verify-headless` |
+
+**Harness chỉnh sau phase này:** AGENTS.md thêm thứ tự tick bắt buộc, bố cục `levels.js`, quy tắc "tính năng mới phải có scenario trước"; skill `verify-headless` thêm Đêm 2/3, cảnh báo `__shot` và nhắc "khi test đỏ, quyết định code sai hay kỳ vọng sai và ghi lý do".
