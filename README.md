@@ -1,6 +1,6 @@
 # Đảo Đèn Lồng
 
-> **Video demo:** _(có ở Phase 4, Release `v1.0.0`)_ · **Bằng chứng:** [Phase 1](docs/proof/phase-1/README.md) · [Phase 2](docs/proof/phase-2/README.md) · Đề lab: [docs/lab](docs/lab/README.md)
+> **Video demo:** _(có ở Phase 4, Release `v1.0.0`)_ · **Bằng chứng:** [Phase 1](docs/proof/phase-1/README.md) · [Phase 2](docs/proof/phase-2/README.md) · [Phase 3](docs/proof/phase-3/README.md) · Đề lab: [docs/lab](docs/lab/README.md)
 
 Game 3D góc nhìn thứ ba (Day 12 · AI SDLC Lab). Bạn là **Mây**, người giữ đèn nhỏ tuổi đội nón lá treo đèn lồng. Qua **ba Đêm trên ba hòn đảo**, gom đom đóm, nạp ánh sáng để thắp lại các **Đèn Lồng Lớn** trước bình minh, tỏa sáng để xua **Bóng Mực** và giữ đom đóm khỏi **Gió Lạc**.
 
@@ -28,37 +28,42 @@ npm start          # mở http://localhost:8080
 | F / chuột phải | Tỏa Sáng: tốn 3 đom đóm, choáng + đẩy Bóng Mực trong 5 m |
 | Esc / P | Tạm dừng (Tiếp tục · Chơi lại Đêm · Cài đặt · Về menu) · M: tắt/bật âm thanh |
 
+Cài đặt (lưu lại giữa các lần mở game): âm lượng, độ nhạy chuột, tắt tiếng, **bảng màu dễ phân biệt** (cho người mù màu).
+
 Thêm `?seed=123` vào URL để chơi lại đúng một màn.
 
 ## Ba Đêm
 
-| Đêm | Đảo | Đèn | Thời gian | Điểm mới |
+| Đêm | Đảo | Đèn (cần sáng lúc bình minh) | Thời gian | Điểm mới |
 |---|---|---|---|---|
-| 1 | Đảo Bến — đảo tròn 40 m | 5 | 5:00 | — |
-| 2 | Đảo Cau — hai đảo nối bằng cầu tre, bục nhảy | 6 | 5:30 | Gió Lạc, Bùa Gió |
-| 3 | Đảo Chuông — ba tầng, dốc, tháp chuông, gió mạnh | 7 | 6:00 | Gió thổi 5 s mỗi 30 s |
+| 1 | Đảo Bến — đảo tròn 40 m | 5 (3) | 4:00 | — |
+| 2 | Đảo Cau — hai đảo nối bằng cầu tre, bục nhảy | 6 (4) | 4:30 | Gió Lạc, Bùa Gió |
+| 3 | Đảo Chuông — ba tầng, dốc, tháp chuông, gió mạnh | 7 (5) | 5:00 | Gió thổi 5 s mỗi 30 s |
 
 Thắng Đêm 3 để thấy **Bình Minh** với tổng điểm. Thua thì chơi lại Đêm đó.
 
 ## Luật và cách tính điểm
 
-- Mang tối đa **10** đom đóm. Mỗi đèn cần **10** (nạp nhiều lần được). Thắp hết đèn của Đêm → **thắng**.
-- Có **3 Ngọn Lửa** (hồi đầy mỗi Đêm). Bóng Mực chạm → mất 1 lửa, rơi một nửa số đom đóm ra quanh Mây (nhặt lại được trong 8 s), bất tử 1.5 s. Rơi khỏi đảo → mất 1 lửa và toàn bộ đom đóm. Hết lửa → **thua**. Hết giờ → bình minh → **thua**.
-- Bóng Mực không vào được vòng **6 m** quanh đèn đã sáng. **Gió Lạc** cướp tối đa 3 đom đóm khi bạn mang từ 5 con trở lên. **Bùa Gió** cho chạy nhanh và lướt không hồi chiêu trong 10 s.
+- Mang tối đa **10** đom đóm, **+2 mỗi lần thắp đèn thành công** trong Đêm (tối đa 20). Mỗi đèn cần **10** để thắp (nạp nhiều lần được).
+- **Đèn cạn dầu:** đèn đang sáng có 100 dầu, mất 1/giây. Đứng gần đèn sáng và bấm E để **châm dầu** (+10 mỗi đom đóm). Hết dầu → đèn tắt; thắp lại chỉ cần **5**. Dưới 30 dầu, đèn nhấp nháy, mất vòng an toàn và Bóng Mực sẽ tới **hút dầu**.
+- **Thắng khi bình minh tới** mà Mây còn lửa và số đèn đang sáng ≥ 60% (3/5, 4/6, 5/7). Thắp đủ đèn sớm không kết thúc Đêm.
+- Có **3 Ngọn Lửa** (hồi đầy mỗi Đêm). Bóng Mực chạm → mất 1 lửa, rơi một nửa số đom đóm ra quanh Mây (nhặt lại được trong 8 s), bất tử 1.5 s. Rơi khỏi đảo → mất 1 lửa và toàn bộ đom đóm. Hết lửa → **thua** ngay. Bình minh mà thiếu đèn sáng → **thua**.
+- Bóng Mực không vào được vòng **6 m** quanh đèn đang sáng còn ≥ 30 dầu. **Gió Lạc** cướp tối đa 3 đom đóm khi bạn mang từ 5 con trở lên. **Bùa Gió** cho chạy nhanh và lướt không hồi chiêu trong 10 s.
 
 | Sự kiện | Điểm |
 |---|---|
-| Mỗi đom đóm **nạp** vào đèn | +10 |
-| Thắp một đèn | +100 |
-| Mỗi Bóng Mực trúng Tỏa Sáng | +5 |
-| Khi thắng: mỗi giây còn lại (làm tròn xuống) | +2 |
+| Mỗi đom đóm nạp vào đèn (thắp, thắp lại, châm dầu) | +5 |
+| Thắp một đèn lần đầu | +100 |
+| Thắp lại một đèn đã tắt | +40 |
+| Mỗi Bóng Mực trúng Tỏa Sáng (đang hút dầu: +15) | +5 |
+| Khi thắng: mỗi đèn đang sáng | +50 + số dầu còn (làm tròn xuống) |
 | Khi thắng: mỗi Ngọn Lửa còn lại | +50 |
 
 Tổng điểm game là tổng điểm các Đêm đã thắng.
 
-## Test Contract (headless, v1.1)
+## Test Contract (headless, v1.2)
 
-`game.contract.json` ở gốc repo khai báo lệnh và mọi số tuning (bằng đúng số chuẩn Ticket-02). Chạy headless:
+`game.contract.json` ở gốc repo khai báo lệnh và mọi số tuning (số chuẩn Ticket-02 + Ticket-03). Chạy headless:
 
 ```bash
 node src/headless.js --seed 1 --night 2 [--scenario s.json] [--inputs i.json] --ticks 600 --out out.jsonl [--snapshot-every 10]
@@ -69,7 +74,7 @@ Exit 0 khi chạy xong; **2** khi file inputs/scenario sai định dạng; 1 cho
 ## Kiểm thử
 
 ```bash
-npm test           # contract + CLI + 47 scenario qua CLI thật + tất định + phát lại ván chơi trọn
+npm test           # contract + CLI + 62 scenario qua CLI thật + tất định + phát lại ván chơi trọn
 npm run proof      # sinh lại docs/proof/<phase>/headless-report.md
 node scripts/bot.js --seed 3 --night 1 --out inputs.json   # bot tự chơi, ghi file inputs
 ```
