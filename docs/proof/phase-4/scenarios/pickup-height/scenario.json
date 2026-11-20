@@ -1,0 +1,19 @@
+{
+  "random_motes": false,
+  "random_shades": false,
+  "random_drifters": false,
+  "motes": [
+    [
+      0.5,
+      1.4,
+      0
+    ],
+    [
+      -0.5,
+      1.6,
+      0
+    ]
+  ],
+  "shades": [],
+  "drifters": []
+}
