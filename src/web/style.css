@@ -76,3 +76,6 @@ button:hover, button:focus-visible { filter: brightness(1.1); outline: 2px solid
   .slot { width: 12px; height: 12px; margin: 0 1px; }
   .cd { width: 44px; height: 44px; }
 }
+/* Ticket-03 §6 colour-blind friendly mode: UI warnings white + ⚠ instead of red */
+body.cb { --danger: #FFFFFF; }
+body.cb #time.low { text-shadow: 0 0 6px #000; }

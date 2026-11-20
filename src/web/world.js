@@ -235,8 +235,21 @@ export function makeLantern() {
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.04;
   ring.visible = false;
-  g.add(base, post, arm, body, cap, core, halo, light, ring);
-  g.userData = { bodyMat, body, core, halo, light, ring, litAt: -1 };
+  // Torn paper strip hanging from a dark lantern (shape cue, Ticket-03 §6).
+  const tear = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.5), new THREE.MeshStandardMaterial({ color: 0xd8cdb0, side: THREE.DoubleSide }));
+  tear.position.set(0.32, 2.35, 1.2);
+  tear.rotation.set(0.2, 0.4, 0.5);
+  // Fuel bar above a lit lantern (billboard sprites).
+  const fuelBar = new THREE.Group();
+  const barBg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x4a4f6a, transparent: true, depthWrite: false }));
+  barBg.scale.set(3.0, 0.45, 1);
+  const fuelFill = new THREE.Sprite(new THREE.SpriteMaterial({ color: PAL.lampOn, transparent: true, depthWrite: false }));
+  fuelFill.scale.set(2.8, 0.32, 1);
+  fuelFill.position.z = 0.01;
+  fuelBar.add(barBg, fuelFill);
+  fuelBar.position.set(0, 4.1, 0.85);
+  g.add(base, post, arm, body, cap, core, halo, light, ring, tear, fuelBar);
+  g.userData = { bodyMat, body, core, halo, light, ring, tear, fuelBar, fuelFill, litAt: -1 };
   return g;
 }
 

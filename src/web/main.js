@@ -14,7 +14,7 @@ const sfx = new Sfx();
 
 // ---------- settings (saved between sessions) ----------
 const SETTINGS_KEY = 'ddl-settings-v1';
-const settings = { volume: 0.8, sens: 1, muted: false };
+const settings = { volume: 0.8, sens: 1, muted: false, colorblind: false };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'));
 } catch { /* storage unavailable: defaults */ }
@@ -229,13 +229,21 @@ function showSettings() {
       <label>Âm lượng <input id="set-vol" type="range" min="0" max="1" step="0.05" value="${settings.volume}"></label>
       <label>Độ nhạy chuột <input id="set-sens" type="range" min="0.2" max="3" step="0.1" value="${settings.sens}"></label>
       <label>Tắt tiếng <input id="set-mute" type="checkbox" ${settings.muted ? 'checked' : ''}></label>
+      <label>Bảng màu dễ phân biệt <input id="set-cb" type="checkbox" ${settings.colorblind ? 'checked' : ''}></label>
     </div>`,
     buttons: [['Xong', () => back()]],
   });
   $('set-vol').addEventListener('input', (e) => { settings.volume = Number(e.target.value); sfx.setVolume(settings.volume); saveSettings(); sfx.pickup(3); });
   $('set-sens').addEventListener('input', (e) => { settings.sens = Number(e.target.value); saveSettings(); });
   $('set-mute').addEventListener('change', (e) => { settings.muted = e.target.checked; sfx.setMuted(settings.muted); saveSettings(); });
+  $('set-cb').addEventListener('change', (e) => { settings.colorblind = e.target.checked; applyColorblind(); saveSettings(); });
 }
+
+// Ticket-03 §6: colour-blind friendly palette (saved): shade rim/eyes #00B3FF, UI warning white + ⚠.
+function applyColorblind() {
+  document.body.classList.toggle('cb', Boolean(settings.colorblind));
+}
+applyColorblind();
 
 function showResult({ result, reason }) {
   mode = 'result';
@@ -244,17 +252,22 @@ function showResult({ result, reason }) {
   if (won) wonScores[night] = sim.score;
   const s = TUNING.score;
   const st = sim.stats;
-  const left = Math.max(0, Math.floor(sim.timeLeft() + 1e-9));
+  const plain = st.stunHits - st.drainHits;
   const rows = [
-    ['Đom đóm nạp vào đèn', `${st.deposited} × ${s.per_mote}`, st.deposited * s.per_mote],
-    ['Đèn thắp', `${st.lit} × ${s.per_lantern}`, st.lit * s.per_lantern],
-    ['Bóng Mực trúng Tỏa Sáng', `${st.stunHits} × ${s.per_stun}`, st.stunHits * s.per_stun],
+    ['Đom đóm nạp / châm dầu', `${st.deposited} × ${s.per_mote}`, st.deposited * s.per_mote],
+    ['Đèn thắp lần đầu', `${st.lit} × ${s.per_lantern}`, st.lit * s.per_lantern],
+    ['Đèn thắp lại', `${st.relit} × ${s.per_relight}`, st.relit * s.per_relight],
+    ['Bóng Mực trúng Tỏa Sáng', `${plain} × ${s.per_stun} + ${st.drainHits} × ${s.per_stun_drain}`, plain * s.per_stun + st.drainHits * s.per_stun_drain],
   ];
   if (won) {
-    rows.push(['Thời gian còn', `${left}s × ${s.per_second_left}`, left * s.per_second_left]);
-    rows.push(['Ngọn Lửa còn', `${sim.player.flames} × ${s.per_flame_left}`, sim.player.flames * s.per_flame_left]);
+    rows.push(['Đèn sáng lúc bình minh (50 + dầu)', `${sim.litCount()} đèn`, st.dawnBonus]);
+    rows.push(['Ngọn Lửa còn', `${sim.player.flames} × ${s.per_flame_left}`, st.flameBonus]);
   }
-  const reasons = { all_lit: 'Mọi Đèn Lồng Lớn đã sáng. Hòn đảo ấm áp trở lại!', no_flames: 'Mây đã hết Ngọn Lửa. Bóng Mực phủ kín đảo…', dawn: 'Bình minh tới mà đảo vẫn còn tối…' };
+  const reasons = {
+    dawn_survived: `Bình minh! ${sim.litCount()}/${sim.lanterns.length} đèn còn sáng — đảo đã được giữ ấm.`,
+    no_flames: 'Mây đã hết Ngọn Lửa. Bóng Mực phủ kín đảo…',
+    dawn: `Bình minh tới nhưng chỉ ${sim.litCount()}/${sim.lanterns.length} đèn còn sáng (cần ${sim.winThreshold()}).`,
+  };
   const table = `<table class="breakdown">${rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}
     <tr><td><b>Điểm Đêm ${night}</b></td><td></td><td><b>${sim.score}</b></td></tr>
     <tr><td>Tổng điểm các Đêm đã thắng</td><td></td><td>${totalScore()}</td></tr></table>`;
@@ -392,6 +405,9 @@ function handleEvent(e) {
     case 'charm_picked': sfx.charm(); toast('Bùa Gió! Chạy nhanh, lướt không hồi chiêu', 2); break;
     case 'drifter_steal': sfx.steal(); toast(`Gió Lạc cướp ${e.data.amount} đom đóm!`, 1.8); break;
     case 'drifter_drop': sfx.pickup(1); toast('Gió Lạc đánh rơi đom đóm!', 1.5); break;
+    case 'refuel': sfx.deposit(); break;
+    case 'lantern_out': sfx.lose(); toast(`⚠ Đèn ${e.data.lantern_id} đã cạn dầu và tắt!`, 2.2); break;
+    case 'fuel_drain': if (e.tick % 180 === 1) toast(`⚠ Bóng Mực đang hút dầu đèn ${e.data.lantern_id}!`, 1.6); break;
     case 'game_over': showResult(e.data); break;
     default: break;
   }
@@ -442,14 +458,26 @@ function syncEntities(time) {
     const m = view.lanterns.get(l.id);
     const u = m.userData;
     if (l.lit) lit++;
-    const fill = l.lit ? 1 : (l.deposited / TUNING.lantern_cost) * 0.35;
+    const fuel = l.fuel / 60; // sim keeps 1/60 units
+    const low = l.lit && fuel < TUNING.low_fuel_threshold;
+    // Ticket-03 §1: fuel < 30 -> lantern and its fuel bar blink slowly (1 Hz).
+    const dim = low && Math.floor(time * 2) % 2 === 1 ? 0.35 : 1;
+    const fill = l.lit ? 1 : (l.deposited / sim.costOf(l)) * 0.35;
     const pop = u.litAt > 0 ? Math.max(0, 1 - (performance.now() - u.litAt) / 800) : 0;
     u.bodyMat.color.setHex(l.lit ? PAL.lampOn : PAL.lampOff);
-    u.bodyMat.emissiveIntensity = l.lit ? 2 + Math.sin(time * 3 + l.pos[0]) * 0.15 + pop * 3 : fill * 2;
-    u.core.material.opacity = l.lit ? 0.9 : fill;
-    u.halo.material.opacity = l.lit ? 0.7 + pop : fill * 0.6;
-    u.light.intensity = l.lit ? 30 + pop * 60 : fill * 8;
-    u.ring.visible = l.lit;
+    u.bodyMat.emissiveIntensity = (l.lit ? 2 + Math.sin(time * 3 + l.pos[0]) * 0.15 + pop * 3 : fill * 2) * dim;
+    u.core.material.opacity = (l.lit ? 0.9 : fill) * dim;
+    u.halo.material.opacity = (l.lit ? 0.7 + pop : fill * 0.6) * dim;
+    u.light.intensity = (l.lit ? 10 + 20 * Math.min(1, fuel / 50) + pop * 60 : fill * 8) * dim;
+    u.ring.visible = l.lit && !low;
+    // Shape cue (no colour needed): a dark lantern is squashed 20% and shows a torn paper strip.
+    u.body.scale.set(1, l.lit ? 1 : 0.8, 1);
+    u.tear.visible = !l.lit;
+    u.fuelBar.visible = l.lit;
+    u.fuelFill.scale.x = Math.max(0.001, 2.8 * fuel / TUNING.fuel_max);
+    u.fuelFill.position.x = -1.4 * (1 - fuel / TUNING.fuel_max);
+    u.fuelFill.material.color.setHex(low ? (settings.colorblind ? 0xffffff : PAL.danger) : PAL.lampOn);
+    u.fuelBar.children.forEach((c) => { c.material.opacity = dim; });
   }
 
   syncMap(view.motes, sim.motes, (mo) => makeMote(mo.kind === 'dropped'), (m, mo) => {
@@ -462,12 +490,17 @@ function syncEntities(time) {
     const u = m.userData;
     const rise = s.state === 'spawning' ? 1 - s.ticks / WORLD.shade_spawning_ticks : 1;
     m.position.set(s.pos[0], s.pos[1] - (1 - rise) * 2 + Math.sin(time * 2 + u.phase) * 0.15, s.pos[2]);
-    m.lookAt(p.pos[0], m.position.y, p.pos[2]);
+    const drainLantern = s.state === 'drain' ? sim.lanterns.find((l) => l.id === s.target) : null;
+    if (drainLantern) m.lookAt(drainLantern.pos[0], m.position.y, drainLantern.pos[2]);
+    else m.lookAt(p.pos[0], m.position.y, p.pos[2]);
     const stunned = s.state === 'stunned';
+    const rimColor = settings.colorblind ? 0x00b3ff : PAL.shadeRim;
     u.bodyMat.color.setHex(stunned ? PAL.shadeStun : PAL.shadeBody);
+    u.bodyMat.emissive.setHex(rimColor);
     u.bodyMat.opacity = stunned ? 0.6 : 0.95 * rise;
-    u.rim.material.opacity = stunned ? 0.2 : 0.55 * rise;
-    u.eyeMat.color.setHex(stunned ? PAL.gold : PAL.shadeRim);
+    u.rim.material.color.setHex(rimColor);
+    u.rim.material.opacity = stunned ? 0.2 : (drainLantern ? 0.55 + Math.sin(time * 10) * 0.3 : 0.55) * rise;
+    u.eyeMat.color.setHex(stunned ? PAL.gold : rimColor);
     m.rotation.z = stunned ? Math.sin(time * 20) * 0.2 : 0;
   });
 
@@ -550,9 +583,9 @@ function updateHud() {
   $('nightname').textContent = `Đêm ${night} — ${LEVELS[night].name}`;
   const cap = sim.capacity();
   $('carried').innerHTML = Array.from({ length: cap }, (_, i) => `<span class="slot ${i < p.carried ? 'on' : ''}"></span>`).join('') + `<span class="count">${p.carried}/${cap}</span>`;
-  $('lit').textContent = `${sim.litCount()}/${sim.lanterns.length}`;
+  $('lit').textContent = `${sim.litCount()}/${sim.lanterns.length} (cần ${sim.winThreshold()})`;
   const tl = Math.max(0, sim.timeLeft());
-  $('time').textContent = fmt(Math.ceil(tl - 1e-9));
+  $('time').textContent = `${tl <= 30 ? '⚠ ' : ''}${fmt(Math.ceil(tl - 1e-9))}`;
   $('time').classList.toggle('low', tl <= 30);
   $('score').textContent = sim.score;
   const cd = (id, left, total, usable) => {
@@ -569,7 +602,9 @@ function updateHud() {
   for (const l of sim.lanterns) {
     if (!sim.acceptsFuel(l)) continue;
     if (Math.hypot(l.pos[0] - p.pos[0], l.pos[2] - p.pos[2]) <= TUNING.interact_radius) {
-      prompt = `E — Nạp ánh sáng (${l.deposited}/${TUNING.lantern_cost})`;
+      prompt = l.lit
+        ? `E — Châm dầu (${Math.floor(l.fuel / 60)}/${TUNING.fuel_max}, cần ${sim.refuelNeed(l)})`
+        : `E — ${l.everLit ? 'Thắp lại' : 'Nạp ánh sáng'} (${l.deposited}/${sim.costOf(l)})`;
       break;
     }
   }
